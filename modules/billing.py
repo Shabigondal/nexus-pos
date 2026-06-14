@@ -129,7 +129,7 @@ class BillingView(ctk.CTkFrame):
         h_frame = ctk.CTkFrame(cart_group, fg_color=COL_BG_CARD_ALT, corner_radius=8, height=38)
         h_frame.pack(fill="x", padx=14, pady=(0, 8))
 
-        self.cart_widths = [200, 90, 130, 110, 80]
+        self.cart_widths = [180, 80, 120, 100, 40]
         headers = ["Item", "Rate", "Quantity", "Total", ""]
 
         for idx, txt in enumerate(headers):
@@ -284,9 +284,20 @@ class BillingView(ctk.CTkFrame):
                 self.cart_items[p_id]['total'] = self.cart_items[p_id]['qty'] * self.cart_items[p_id]['rate']
             self.refresh_cart_display_grid()
 
-    # =================================================================
-    # 🧾 CART RENDERING
-    # =================================================================
+    def set_qty_manual(self, p_id, value):
+        if p_id not in self.cart_items:
+            return
+        try:
+            new_qty = int(float(str(value).strip()))
+        except ValueError:
+            new_qty = self.cart_items[p_id]['qty']
+
+        if new_qty <= 0:
+            del self.cart_items[p_id]
+        else:
+            self.cart_items[p_id]['qty'] = new_qty
+            self.cart_items[p_id]['total'] = new_qty * self.cart_items[p_id]['rate']
+        self.refresh_cart_display_grid()
     def refresh_cart_display_grid(self):
         for w in self.cart_scroll.winfo_children(): w.destroy()
         self.subtotal = 0.0
@@ -314,8 +325,14 @@ class BillingView(ctk.CTkFrame):
                           fg_color=COL_BG_INPUT, hover_color=COL_BORDER, text_color=COL_TEXT_MAIN,
                           font=ctk.CTkFont(size=13, weight="bold"),
                           command=lambda k=p_id: self.modify_qty_counter(k, -1)).pack(side="left", padx=2)
-            ctk.CTkLabel(qty_control_box, text=f"{item['qty']}", font=ctk.CTkFont(size=12, weight="bold"),
-                         text_color=COL_TEXT_MAIN, width=32).pack(side="left", padx=2)
+            qty_var = ctk.StringVar(value=str(item['qty']))
+            qty_entry = ctk.CTkEntry(qty_control_box, textvariable=qty_var, width=40, height=26,
+                                      justify="center", fg_color=COL_BG_INPUT, border_color=COL_BORDER,
+                                      corner_radius=6, font=ctk.CTkFont(size=12, weight="bold"),
+                                      text_color=COL_TEXT_MAIN)
+            qty_entry.pack(side="left", padx=2)
+            qty_entry.bind("<Return>", lambda e, k=p_id, v=qty_var: self.set_qty_manual(k, v.get()))
+            qty_entry.bind("<FocusOut>", lambda e, k=p_id, v=qty_var: self.set_qty_manual(k, v.get()))
             ctk.CTkButton(qty_control_box, text="+", width=26, height=26, corner_radius=6,
                           fg_color=COL_BG_INPUT, hover_color=COL_BORDER, text_color=COL_TEXT_MAIN,
                           font=ctk.CTkFont(size=13, weight="bold"),
