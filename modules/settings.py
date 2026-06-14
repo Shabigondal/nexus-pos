@@ -35,10 +35,6 @@ COL_TEXT_MAIN   = "#f1f5f9"
 COL_TEXT_MUTED  = "#94a3b8"
 COL_TEXT_SOFT   = "#64748b"
 
-FONT_LABEL = ctk.CTkFont(size=12)
-FONT_BOLD  = ctk.CTkFont(size=13, weight="bold")
-FONT_HINT  = ctk.CTkFont(size=11)
-
 
 class SettingsView(ctk.CTkFrame):
     """Full System Configuration workspace: Account, Shop Profile, Printer Setup, Backup, and Software Update."""
@@ -122,7 +118,7 @@ class SettingsView(ctk.CTkFrame):
         pw_action_row.pack(fill="x", padx=18, pady=(2, 16))
 
         self.accent_button(pw_action_row, "Update Password", command=self.handle_update_password, width=170).pack(side="left")
-        self.account_status_lbl = ctk.CTkLabel(pw_action_row, text="", font=FONT_LABEL)
+        self.account_status_lbl = ctk.CTkLabel(pw_action_row, text="", font=ctk.CTkFont(size=12))
         self.account_status_lbl.pack(side="left", padx=(14, 0))
 
     def handle_update_username(self):
@@ -190,7 +186,7 @@ class SettingsView(ctk.CTkFrame):
         self.footer_note_entry.insert(0, self.settings.get("footer_note", "System generated invoice. Thank you for your business!"))
         self.footer_note_entry.pack(anchor="w", fill="x", padx=18, pady=(0, 8))
         ctk.CTkLabel(identity_card, text="Shown at the bottom of every printed receipt.",
-                     font=FONT_HINT, text_color=COL_TEXT_SOFT).pack(anchor="w", padx=18, pady=(0, 16))
+                     font=ctk.CTkFont(size=11), text_color=COL_TEXT_SOFT).pack(anchor="w", padx=18, pady=(0, 16))
 
         # --- Right: Logo card ---
         logo_card = self.create_inner_card(body)
@@ -203,7 +199,7 @@ class SettingsView(ctk.CTkFrame):
 
         self.logo_preview_lbl = ctk.CTkLabel(logo_row, text="", width=80, height=80,
                                               fg_color=COL_BG_INPUT, corner_radius=8,
-                                              text_color=COL_TEXT_SOFT, font=FONT_HINT)
+                                              text_color=COL_TEXT_SOFT, font=ctk.CTkFont(size=11))
         self.logo_preview_lbl.configure(text="No Logo")
         self.logo_preview_lbl.pack(side="left", padx=(0, 14))
         self.refresh_logo_preview()
@@ -215,7 +211,7 @@ class SettingsView(ctk.CTkFrame):
         self.ghost_button(logo_btns, "Remove Logo", command=self.handle_remove_logo).pack(fill="x")
 
         ctk.CTkLabel(logo_card, text="If no logo is uploaded, the shop name will be shown on invoices instead.",
-                     font=FONT_HINT, text_color=COL_TEXT_SOFT, wraplength=240, justify="left").pack(
+                     font=ctk.CTkFont(size=11), text_color=COL_TEXT_SOFT, wraplength=240, justify="left").pack(
             anchor="w", padx=18, pady=(8, 16))
 
         # --- Save row ---
@@ -223,7 +219,7 @@ class SettingsView(ctk.CTkFrame):
         save_row.grid(row=1, column=0, columnspan=2, sticky="w", pady=(14, 0))
 
         self.accent_button(save_row, "💾  Save Shop Profile", command=self.handle_save_profile, width=190).pack(side="left")
-        self.profile_status_lbl = ctk.CTkLabel(save_row, text="", font=FONT_LABEL)
+        self.profile_status_lbl = ctk.CTkLabel(save_row, text="", font=ctk.CTkFont(size=12))
         self.profile_status_lbl.pack(side="left", padx=(14, 0))
 
     def refresh_logo_preview(self):
@@ -240,7 +236,7 @@ class SettingsView(ctk.CTkFrame):
                 pass
 
         self.logo_preview_lbl.configure(image=None, text="No Logo", text_color=COL_TEXT_SOFT,
-                                         font=FONT_HINT)
+                                         font=ctk.CTkFont(size=11))
 
     def handle_upload_logo(self):
         file_path = filedialog.askopenfilename(
@@ -319,7 +315,7 @@ class SettingsView(ctk.CTkFrame):
                                                   button_hover_color=COL_ACCENT,
                                                   dropdown_fg_color=COL_BG_CARD,
                                                   text_color=COL_TEXT_MAIN,
-                                                  font=FONT_LABEL)
+                                                  font=ctk.CTkFont(size=12))
         if saved_printer:
             self.printer_dropdown.set(saved_printer)
         elif options:
@@ -342,7 +338,7 @@ class SettingsView(ctk.CTkFrame):
             unselected_color=COL_BG_INPUT,
             unselected_hover_color=COL_BORDER,
             text_color=COL_TEXT_MAIN, height=38,
-            font=FONT_BOLD
+            font=ctk.CTkFont(size=13, weight="bold")
         )
         saved_paper = self.settings.get("printer_paper_size", "80mm")
         if saved_paper not in PAPER_SIZES:
@@ -351,7 +347,7 @@ class SettingsView(ctk.CTkFrame):
         self.paper_size_segment.pack(anchor="w", fill="x", padx=18, pady=(0, 10))
 
         ctk.CTkLabel(paper_card, text="58mm and 80mm are the most common thermal receipt printer widths.",
-                     font=FONT_HINT, text_color=COL_TEXT_SOFT, wraplength=260, justify="left").pack(
+                     font=ctk.CTkFont(size=11), text_color=COL_TEXT_SOFT, wraplength=260, justify="left").pack(
             anchor="w", padx=18, pady=(0, 16))
 
         # --- Save row ---
@@ -359,7 +355,7 @@ class SettingsView(ctk.CTkFrame):
         save_row.grid(row=1, column=0, columnspan=2, sticky="w", pady=(14, 0))
 
         self.accent_button(save_row, "💾  Save Printer Settings", command=self.handle_save_printer, width=200).pack(side="left")
-        self.printer_status_lbl = ctk.CTkLabel(save_row, text="", font=FONT_LABEL)
+        self.printer_status_lbl = ctk.CTkLabel(save_row, text="", font=ctk.CTkFont(size=12))
         self.printer_status_lbl.pack(side="left", padx=(14, 0))
 
     def detect_printers(self):
@@ -414,7 +410,7 @@ class SettingsView(ctk.CTkFrame):
         card.pack(fill="x")
 
         self.backup_status_lbl = ctk.CTkLabel(card, text="No recent backup activity.",
-                                               font=FONT_LABEL, text_color=COL_TEXT_SOFT)
+                                               font=ctk.CTkFont(size=12), text_color=COL_TEXT_SOFT)
         self.backup_status_lbl.pack(anchor="w", padx=18, pady=(16, 10))
 
         btn_row = ctk.CTkFrame(card, fg_color="transparent")
@@ -468,11 +464,11 @@ class SettingsView(ctk.CTkFrame):
 
         version_badge = ctk.CTkFrame(info_row, fg_color=COL_ACCENT_SOFT, corner_radius=6)
         version_badge.pack(side="left")
-        ctk.CTkLabel(version_badge, text=f"  Build {CURRENT_VERSION}  ", font=FONT_BOLD,
+        ctk.CTkLabel(version_badge, text=f"  Build {CURRENT_VERSION}  ", font=ctk.CTkFont(size=13, weight="bold"),
                      text_color=COL_ACCENT).pack(padx=4, pady=4)
 
         self.update_status_lbl = ctk.CTkLabel(card, text="Updates: System up to date.",
-                                               font=FONT_LABEL, text_color=COL_TEXT_SOFT)
+                                               font=ctk.CTkFont(size=12), text_color=COL_TEXT_SOFT)
         self.update_status_lbl.pack(anchor="w", padx=18, pady=(10, 10))
 
         self.accent_button(card, "🔍  Check for Software Updates", command=self.check_for_updates, width=230).pack(
@@ -494,7 +490,7 @@ class SettingsView(ctk.CTkFrame):
                 self.btn_download_update = ctk.CTkButton(
                     self.update_status_lbl.master, text="⬇️  Download Update", fg_color=COL_SUCCESS_BG,
                     hover_color="#1f3d2c", text_color=COL_SUCCESS, border_color=COL_SUCCESS, border_width=1,
-                    height=36, corner_radius=8, font=FONT_BOLD,
+                    height=36, corner_radius=8, font=ctk.CTkFont(size=13, weight="bold"),
                     command=self.open_update_link
                 )
                 self.btn_download_update.pack(anchor="w", padx=18, pady=(0, 14))
@@ -536,7 +532,7 @@ class SettingsView(ctk.CTkFrame):
         text_col.pack(side="left", fill="x", expand=True)
         ctk.CTkLabel(text_col, text=title, font=ctk.CTkFont(size=15, weight="bold"),
                      text_color=COL_TEXT_MAIN).pack(anchor="w")
-        ctk.CTkLabel(text_col, text=subtitle, font=FONT_HINT, text_color=COL_TEXT_SOFT).pack(anchor="w", pady=(2, 0))
+        ctk.CTkLabel(text_col, text=subtitle, font=ctk.CTkFont(size=11), text_color=COL_TEXT_SOFT).pack(anchor="w", pady=(2, 0))
 
         return panel
 
@@ -551,21 +547,21 @@ class SettingsView(ctk.CTkFrame):
         return ctk.CTkEntry(parent, width=width, height=38, fg_color=COL_BG_INPUT,
                              border_color=COL_BORDER, border_width=1, corner_radius=6,
                              text_color=COL_TEXT_MAIN, placeholder_text=placeholder, show=show,
-                             font=FONT_LABEL)
+                             font=ctk.CTkFont(size=12))
 
     def accent_button(self, parent, text, command, width=160):
         return ctk.CTkButton(parent, text=text, width=width, height=38, corner_radius=8,
                               fg_color=COL_ACCENT, hover_color="#2563eb", text_color="#ffffff",
-                              font=FONT_BOLD, command=command)
+                              font=ctk.CTkFont(size=13, weight="bold"), command=command)
 
     def ghost_button(self, parent, text, command, width=160):
         return ctk.CTkButton(parent, text=text, width=width, height=38, corner_radius=8,
                               fg_color="transparent", hover_color=COL_BORDER,
                               border_color=COL_BORDER, border_width=1, text_color=COL_TEXT_MUTED,
-                              font=FONT_BOLD, command=command)
+                              font=ctk.CTkFont(size=13, weight="bold"), command=command)
 
     def danger_button(self, parent, text, command, width=160):
         return ctk.CTkButton(parent, text=text, width=width, height=38, corner_radius=8,
                               fg_color=COL_DANGER_BG, hover_color="#3a1c1c",
                               border_color=COL_DANGER, border_width=1, text_color=COL_DANGER,
-                              font=FONT_BOLD, command=command)
+                              font=ctk.CTkFont(size=13, weight="bold"), command=command)
