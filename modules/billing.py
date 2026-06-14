@@ -61,7 +61,7 @@ class BillingView(ctk.CTkFrame):
         search_row.pack(fill="x", padx=18, pady=(0, 6))
 
         self.inp_cust_search = ctk.CTkEntry(
-            search_row, placeholder_text="Customer name, phone or Khata ID...",
+            search_row, placeholder_text="Customer name, phone, or Khata No. (e.g. KH-0004 or 4)...",
             height=36, fg_color=COL_BG_INPUT, border_color=COL_BORDER,
             corner_radius=8, font=ctk.CTkFont(size=13)
         )

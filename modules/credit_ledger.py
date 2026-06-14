@@ -20,6 +20,9 @@ class CreditLedgerView(ctk.CTkFrame):
         self.active_customer = None # Focused Customer Node Tuple Cache
         self.current_page = 1
         self.page_size = 10
+
+        self.pb_current_page = 1
+        self.pb_page_size = 25
         
         # --- SUB-TAB CONTROL HEADER STRIP ---
         self.tabs_nav_frame = ctk.CTkFrame(self, height=45, fg_color="#16161a", border_color="#222227", border_width=1)
@@ -71,6 +74,7 @@ class CreditLedgerView(ctk.CTkFrame):
         self.btn_tab_directory.configure(fg_color="transparent", text_color="gray")
         self.btn_tab_passbook.configure(fg_color="#1f1f24", text_color="#ffffff")
         self.btn_tab_cashflow.configure(fg_color="transparent", text_color="gray")
+        self.pb_current_page = 1
         self.render_passbook_timeline()
 
     def switch_to_cashflow_tab(self):
@@ -99,7 +103,7 @@ class CreditLedgerView(ctk.CTkFrame):
         search_box = ctk.CTkFrame(left_pane, fg_color="#16161a", border_color="#222227", border_width=1, corner_radius=6)
         search_box.pack(fill="x", pady=(0, 10))
         
-        self.search_entry = ctk.CTkEntry(search_box, placeholder_text="🔍 Filter via ID, Name Account, Phone Sequence...", height=38, fg_color="#121214", border_color="#222227")
+        self.search_entry = ctk.CTkEntry(search_box, placeholder_text="🔍 Search by Khata No. (KH-0004), Name, or Phone...", height=38, fg_color="#121214", border_color="#222227")
         self.search_entry.pack(side="left", fill="x", expand=True, padx=15, pady=10)
         self.search_entry.bind("<KeyRelease>", lambda e: self.on_search_changed())
         
@@ -321,7 +325,7 @@ class CreditLedgerView(ctk.CTkFrame):
         self.inp_pb_to = ctk.CTkEntry(filter_bar, placeholder_text="YYYY-MM-DD", width=110, height=32, fg_color="#121214", border_color="#222227")
         self.inp_pb_to.pack(side="left", padx=5, pady=8)
 
-        ctk.CTkButton(filter_bar, text="🔍 Apply", width=80, height=32, fg_color="#1f293d", font=ctk.CTkFont(size=12, weight="bold"), command=self.render_passbook_timeline).pack(side="left", padx=(10, 5), pady=8)
+        ctk.CTkButton(filter_bar, text="🔍 Apply", width=80, height=32, fg_color="#1f293d", font=ctk.CTkFont(size=12, weight="bold"), command=self.apply_pb_date_filter).pack(side="left", padx=(10, 5), pady=8)
 
         ctk.CTkLabel(filter_bar, text="Month:", font=ctk.CTkFont(size=12), text_color="#8a8a93").pack(side="left", padx=(20, 5), pady=8)
 
@@ -347,9 +351,44 @@ class CreditLedgerView(ctk.CTkFrame):
         self.passbook_scroll = ctk.CTkScrollableFrame(self.passbook_frame, fg_color="#121214", border_color="#222227", border_width=1, corner_radius=6)
         self.passbook_scroll.pack(fill="both", expand=True)
 
+        # --- PASSBOOK PAGINATION BAR ---
+        pb_pagination_bar = ctk.CTkFrame(self.passbook_frame, fg_color="#16161a", border_color="#222227", border_width=1, height=45)
+        pb_pagination_bar.pack(fill="x", pady=(10, 0))
+
+        self.btn_pb_prev_page = ctk.CTkButton(pb_pagination_bar, text="⬅ Previous", width=100, height=32, fg_color="#1f1f24", font=ctk.CTkFont(size=12), command=self.go_pb_prev_page)
+        self.btn_pb_prev_page.pack(side="left", padx=10, pady=6)
+
+        self.lbl_pb_page_info = ctk.CTkLabel(pb_pagination_bar, text="Page 1 of 1", font=ctk.CTkFont(size=12, weight="bold"), text_color="#a0a0a9")
+        self.lbl_pb_page_info.pack(side="left", expand=True)
+
+        self.btn_pb_next_page = ctk.CTkButton(pb_pagination_bar, text="Next ➡", width=100, height=32, fg_color="#1f1f24", font=ctk.CTkFont(size=12), command=self.go_pb_next_page)
+        self.btn_pb_next_page.pack(side="right", padx=10, pady=6)
+
+    def apply_pb_date_filter(self):
+        self.pb_current_page = 1
+        self.render_passbook_timeline()
+
+    def go_pb_prev_page(self):
+        if self.pb_current_page > 1:
+            self.pb_current_page -= 1
+            self.render_passbook_timeline()
+
+    def go_pb_next_page(self):
+        if not self.active_customer:
+            return
+        k_id, _, _, _ = self.active_customer
+        start_date = self.inp_pb_from.get().strip()
+        end_date = self.inp_pb_to.get().strip()
+        total = db.get_customer_passbook_count(k_id, start_date, end_date)
+        total_pages = max((total + self.pb_page_size - 1) // self.pb_page_size, 1)
+        if self.pb_current_page < total_pages:
+            self.pb_current_page += 1
+            self.render_passbook_timeline()
+
     def apply_month_filter(self):
         month_name = self.pb_month_dropdown.get()
         year = self.pb_year_dropdown.get()
+        self.pb_current_page = 1
 
         if month_name == "All":
             self.inp_pb_from.delete(0, "end")
@@ -378,6 +417,7 @@ class CreditLedgerView(ctk.CTkFrame):
         self.inp_pb_from.delete(0, "end")
         self.inp_pb_to.delete(0, "end")
         self.pb_month_dropdown.set("All")
+        self.pb_current_page = 1
         self.render_passbook_timeline()
 
     def render_passbook_timeline(self):
@@ -390,7 +430,15 @@ class CreditLedgerView(ctk.CTkFrame):
         start_date = self.inp_pb_from.get().strip()
         end_date = self.inp_pb_to.get().strip()
 
-        logs = db.get_customer_passbook(k_id, start_date, end_date)
+        total = db.get_customer_passbook_count(k_id, start_date, end_date)
+        total_pages = max((total + self.pb_page_size - 1) // self.pb_page_size, 1)
+
+        if self.pb_current_page > total_pages:
+            self.pb_current_page = total_pages
+        if self.pb_current_page < 1:
+            self.pb_current_page = 1
+
+        logs = db.get_customer_passbook(k_id, start_date, end_date, page=self.pb_current_page, page_size=self.pb_page_size)
         widths = [130, 130, 180, 85, 95]
         
         h_frame = ctk.CTkFrame(self.passbook_scroll, fg_color="#16161a", height=32, corner_radius=2)
@@ -421,6 +469,11 @@ class CreditLedgerView(ctk.CTkFrame):
             c_color = "#4aff4a" if closing >= 0 else "#ff4a4a"
             c_prefix = "Rs." if closing >= 0 else "-Rs."
             ctk.CTkLabel(row, text=f"{c_prefix}{abs(closing):,.1f}", width=widths[4], font=ctk.CTkFont(size=11, weight="bold"), text_color=c_color).pack(side="left", padx=4)
+
+        # Update pagination controls
+        self.lbl_pb_page_info.configure(text=f"Page {self.pb_current_page} of {total_pages}  ({total} total)")
+        self.btn_pb_prev_page.configure(state="normal" if self.pb_current_page > 1 else "disabled")
+        self.btn_pb_next_page.configure(state="normal" if self.pb_current_page < total_pages else "disabled")
 
     # =================================================================
     # 📊 SUB-TAB 3: AGENCY DAILY CASH FLOW METRICS REPORT SUMMARY
@@ -693,7 +746,7 @@ class CreditLedgerView(ctk.CTkFrame):
             c.alignment = s["center"]; c.border = s["border"]
 
         # Data
-        logs = db.get_customer_passbook(khata_id)
+        logs = db.get_customer_passbook(khata_id, page=1, page_size=10**9)
         action_colors = {
             "ADVANCE_DEPOSIT":  "4aff4a",
             "CASH_WITHDRAWAL":  "ff9f43",

@@ -559,20 +559,37 @@ def CRITICAL_init_ledger_tables():
 
     conn.close()
 
+def _normalize_khata_search(search_query):
+    """If the query looks like a Khata Number (e.g. 'KH-0004', 'kh0004', '#4'),
+    extract the numeric ID so it can also match khata_id directly."""
+    import re
+    q = search_query.strip()
+    m = re.match(r'^\s*(?:kh|#)?[-\s#]*0*(\d+)\s*$', q, re.IGNORECASE)
+    if m:
+        return m.group(1)
+    return None
+
+
 def get_ledger_customers(search_query="", page=1, page_size=10):
-    """Paginated khata directory. page=1-indexed. Returns list of (khata_id, name, phone, balance)."""
+    """Paginated khata directory. page=1-indexed. Returns list of (khata_id, name, phone, balance).
+    Search matches customer name, phone number, or Khata Number (e.g. '4', 'KH-0004', 'kh4')."""
     import sqlite3
     conn = sqlite3.connect("database/pos_system.db")
     cursor = conn.cursor()
     offset = max(page - 1, 0) * page_size
     if search_query:
+        khata_num = _normalize_khata_search(search_query)
+        like_term = f"%{search_query}%"
+        khata_term = khata_num if khata_num is not None else search_query
         cursor.execute("""
             SELECT khata_id, customer_name, phone_number, current_wallet_balance 
             FROM ledger_customers 
-            WHERE customer_name LIKE ? OR phone_number LIKE ? OR CAST(khata_id AS TEXT) LIKE ?
+            WHERE customer_name LIKE ? OR phone_number LIKE ?
+               OR CAST(khata_id AS TEXT) LIKE ?
+               OR CAST(khata_id AS TEXT) = ?
             ORDER BY khata_id DESC
             LIMIT ? OFFSET ?
-        """, (f"%{search_query}%", f"%{search_query}%", f"%{search_query}%", page_size, offset))
+        """, (like_term, like_term, like_term, khata_term, page_size, offset))
     else:
         cursor.execute("""
             SELECT khata_id, customer_name, phone_number, current_wallet_balance 
@@ -589,10 +606,15 @@ def get_ledger_customers_count(search_query=""):
     conn = sqlite3.connect("database/pos_system.db")
     cursor = conn.cursor()
     if search_query:
+        khata_num = _normalize_khata_search(search_query)
+        like_term = f"%{search_query}%"
+        khata_term = khata_num if khata_num is not None else search_query
         cursor.execute("""
             SELECT COUNT(*) FROM ledger_customers 
-            WHERE customer_name LIKE ? OR phone_number LIKE ? OR CAST(khata_id AS TEXT) LIKE ?
-        """, (f"%{search_query}%", f"%{search_query}%", f"%{search_query}%"))
+            WHERE customer_name LIKE ? OR phone_number LIKE ?
+               OR CAST(khata_id AS TEXT) LIKE ?
+               OR CAST(khata_id AS TEXT) = ?
+        """, (like_term, like_term, like_term, khata_term))
     else:
         cursor.execute("SELECT COUNT(*) FROM ledger_customers")
     total = cursor.fetchone()[0]
@@ -695,8 +717,9 @@ def process_wallet_transaction(khata_id, action_type, amount, desc):
     except Exception as e:
         return False, str(e)
 
-def get_customer_passbook(khata_id, start_date="", end_date=""):
-    """Passbook timeline, optionally filtered by a date range (YYYY-MM-DD format, inclusive)."""
+def get_customer_passbook(khata_id, start_date="", end_date="", page=1, page_size=25):
+    """Passbook timeline, optionally filtered by a date range (YYYY-MM-DD format, inclusive).
+    Paginated (page=1-indexed) so very active accounts don't render thousands of rows at once."""
     import sqlite3
     conn = sqlite3.connect("database/pos_system.db")
     cursor = conn.cursor()
@@ -713,12 +736,35 @@ def get_customer_passbook(khata_id, start_date="", end_date=""):
         params.append(start_date)
         params.append(end_date)
 
-    query += " ORDER BY log_id DESC"
+    query += " ORDER BY log_id DESC LIMIT ? OFFSET ?"
+    offset = max(page - 1, 0) * page_size
+    params.append(page_size)
+    params.append(offset)
 
     cursor.execute(query, params)
     res = cursor.fetchall()
     conn.close()
     return res
+
+
+def get_customer_passbook_count(khata_id, start_date="", end_date=""):
+    """Total number of passbook entries for a customer matching the optional date range (for pagination)."""
+    import sqlite3
+    conn = sqlite3.connect("database/pos_system.db")
+    cursor = conn.cursor()
+
+    query = "SELECT COUNT(*) FROM ledger_transactions WHERE khata_id = ?"
+    params = [khata_id]
+
+    if start_date and end_date:
+        query += " AND date(timestamp) BETWEEN date(?) AND date(?)"
+        params.append(start_date)
+        params.append(end_date)
+
+    cursor.execute(query, params)
+    total = cursor.fetchone()[0]
+    conn.close()
+    return total
 
 def import_ledger_customers_bulk(rows):
     """
