@@ -513,7 +513,7 @@ def CRITICAL_init_ledger_tables():
         CREATE TABLE IF NOT EXISTS ledger_customers (
             khata_id INTEGER PRIMARY KEY AUTOINCREMENT,
             customer_name TEXT NOT NULL,
-            phone_number TEXT NOT NULL UNIQUE, -- Phone number unique hona lazmi hai duplicates se bachne k liye
+            phone_number TEXT UNIQUE, -- Optional. NULL allowed (multiple customers can have no phone); if provided, must be unique
             current_wallet_balance REAL DEFAULT 0.0, -- Positive means customer cash with us, Negative means credit/udhaar
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -533,6 +533,30 @@ def CRITICAL_init_ledger_tables():
         )
     """)
     conn.commit()
+
+    # --- Migration: older databases may have phone_number as NOT NULL UNIQUE,
+    # which blocks customers without a phone number. Rebuild the table if so.
+    cursor.execute("PRAGMA table_info(ledger_customers)")
+    columns = cursor.fetchall()
+    phone_col = next((c for c in columns if c[1] == "phone_number"), None)
+    if phone_col and phone_col[3] == 1:  # notnull flag == 1 means old schema
+        cursor.execute("""
+            CREATE TABLE ledger_customers_new (
+                khata_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_name TEXT NOT NULL,
+                phone_number TEXT UNIQUE,
+                current_wallet_balance REAL DEFAULT 0.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO ledger_customers_new (khata_id, customer_name, phone_number, current_wallet_balance, created_at)
+            SELECT khata_id, customer_name, phone_number, current_wallet_balance, created_at FROM ledger_customers
+        """)
+        cursor.execute("DROP TABLE ledger_customers")
+        cursor.execute("ALTER TABLE ledger_customers_new RENAME TO ledger_customers")
+        conn.commit()
+
     conn.close()
 
 def get_ledger_customers(search_query="", page=1, page_size=10):
@@ -575,12 +599,16 @@ def get_ledger_customers_count(search_query=""):
     conn.close()
     return total
 
-def add_ledger_customer(name, phone):
+def add_ledger_customer(name, phone, opening_balance=0.0):
     import sqlite3
     try:
+        phone_val = phone.strip() if phone and phone.strip() else None
         conn = sqlite3.connect("database/pos_system.db")
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO ledger_customers (customer_name, phone_number, current_wallet_balance) VALUES (?, ?, 0.0)", (name, phone))
+        cursor.execute(
+            "INSERT INTO ledger_customers (customer_name, phone_number, current_wallet_balance) VALUES (?, ?, ?)",
+            (name, phone_val, float(opening_balance))
+        )
         conn.commit()
         conn.close()
         _sync_khata_excel_safe()
@@ -594,11 +622,12 @@ def update_ledger_customer(khata_id, name, phone):
     """Updates only the customer name and phone number for a khata account."""
     import sqlite3
     try:
+        phone_val = phone.strip() if phone and phone.strip() else None
         conn = sqlite3.connect("database/pos_system.db")
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE ledger_customers SET customer_name=?, phone_number=? WHERE khata_id=?",
-            (name, phone, int(khata_id))
+            (name, phone_val, int(khata_id))
         )
         conn.commit()
         conn.close()
