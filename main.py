@@ -1,5 +1,6 @@
 import customtkinter as ctk
 import threading
+import time
 import tkinter.messagebox as messagebox
 import webbrowser
 from modules.auth import AuthWindow
@@ -11,6 +12,7 @@ from modules.dashboard import DashboardView
 from modules.settings import SettingsView
 from modules.product_daily_report import ProductDailyReportView
 from modules.update_checker import check_for_update, CURRENT_VERSION
+from modules.backup_manager import sync_db_to_drive
 from database.db_manager import get_setting
 
 ctk.set_appearance_mode("Dark")
@@ -43,6 +45,19 @@ class EnterpriseBillingApp(ctk.CTk):
         self.render_application_shell()
         # Silent background check for new releases (non-blocking)
         self.after(1500, self.run_startup_update_check)
+        # Start the 24-hour silent Google Drive auto-sync loop
+        self.start_drive_auto_sync()
+
+    def start_drive_auto_sync(self):
+        """Runs sync_db_to_drive() once now, then every 24 hours, on a background thread."""
+        SYNC_INTERVAL_SECONDS = 24 * 60 * 60  # 24 hours
+
+        def _loop():
+            while True:
+                sync_db_to_drive()
+                time.sleep(SYNC_INTERVAL_SECONDS)
+
+        threading.Thread(target=_loop, daemon=True).start()
 
     def run_startup_update_check(self):
         threading.Thread(target=self._check_update_background, daemon=True).start()

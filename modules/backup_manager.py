@@ -38,6 +38,7 @@ SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 CREDENTIALS_FILE = "drive_credentials.json"   # OAuth client secret, provided by the app owner
 TOKEN_FILE = "drive_token.pickle"             # stores the user's authorized session
 DRIVE_BACKUP_FOLDER_NAME = "Nexus POS Backups"
+LIVE_SYNC_FILE_NAME = "nexus_live_database.db"  # single file that auto-sync keeps updating
 
 
 def default_backup_filename():
@@ -201,6 +202,63 @@ def _get_or_create_backup_folder(service):
     }
     folder = service.files().create(body=folder_metadata, fields="id").execute()
     return folder["id"]
+
+
+def _find_file_in_folder(service, folder_id, filename):
+    """Returns the file ID of `filename` inside `folder_id`, or None if not found."""
+    query = (
+        f"name='{filename}' and '{folder_id}' in parents and trashed=false"
+    )
+    results = service.files().list(q=query, fields="files(id, name)").execute()
+    files = results.get("files", [])
+    return files[0]["id"] if files else None
+
+
+def sync_db_to_drive():
+    """
+    Keeps a SINGLE live copy of the database ('nexus_live_database.db') inside
+    'Nexus POS Backups' on the user's Google Drive, always up to date.
+
+    - If the file already exists on Drive -> its content is overwritten/updated.
+    - If it does not exist yet -> it is created.
+
+    Intended to run silently in the background (e.g. every 24 hours) without
+    showing popups. Returns True on success, False otherwise (errors are
+    swallowed so a failed sync never disrupts the app).
+    """
+    try:
+        if not os.path.exists(DB_PATH):
+            return False
+
+        if not GOOGLE_LIBS_AVAILABLE or not os.path.exists(CREDENTIALS_FILE):
+            return False
+
+        if not os.path.exists(TOKEN_FILE):
+            # No saved session yet -> user must connect manually first
+            # (avoid popping up a browser login window in the background)
+            return False
+
+        service = _get_drive_service()
+        folder_id = _get_or_create_backup_folder(service)
+
+        existing_file_id = _find_file_in_folder(service, folder_id, LIVE_SYNC_FILE_NAME)
+        media = MediaFileUpload(DB_PATH, mimetype="application/octet-stream")
+
+        if existing_file_id:
+            # Update the existing file's content in place (same file, new data)
+            service.files().update(fileId=existing_file_id, media_body=media).execute()
+        else:
+            # First time -> create the live sync file
+            file_metadata = {
+                "name": LIVE_SYNC_FILE_NAME,
+                "parents": [folder_id],
+            }
+            service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+
+        return True
+
+    except Exception:
+        return False
 
 
 def upload_to_drive(parent_window=None, local_file_path=None):

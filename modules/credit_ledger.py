@@ -222,7 +222,7 @@ class CreditLedgerView(ctk.CTkFrame):
             
             ctk.CTkLabel(row, text=f"KH-{k_id:04d}", width=widths[0], font=ctk.CTkFont(weight="bold"), text_color="#8ed1fc").pack(side="left", padx=3)
             ctk.CTkLabel(row, text=name[:18], width=widths[1], anchor="w", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=3)
-            ctk.CTkLabel(row, text=phone, width=widths[2], text_color="gray").pack(side="left", padx=3)
+            ctk.CTkLabel(row, text=phone if phone else "—", width=widths[2], text_color="gray").pack(side="left", padx=3)
             
             bal_color = "#4aff4a" if balance >= 0 else "#ff4a4a"
             bal_prefix = "Rs." if balance >= 0 else "-Rs."
@@ -467,7 +467,7 @@ class CreditLedgerView(ctk.CTkFrame):
     def open_new_wallet_modal(self):
         modal = ctk.CTkToplevel(self)
         modal.title("Open Customer Advance Wallet Profile")
-        modal.geometry("400x320")
+        modal.geometry("400x420")
         modal.resizable(False, False)
         modal.attributes("-topmost", True)
         modal.grab_set()
@@ -478,21 +478,34 @@ class CreditLedgerView(ctk.CTkFrame):
         
         ctk.CTkLabel(w, text="Open New Advance Wallet", font=ctk.CTkFont(size=15, weight="bold"), text_color="#4a90e2").pack(pady=(15, 10))
         
-        inp_n = ctk.CTkEntry(w, placeholder_text="Account Customer Full Name *", width=300, height=38, fg_color="#121214", border_color="#222227")
+        inp_n = ctk.CTkEntry(w, placeholder_text="Customer Full Name *", width=300, height=38, fg_color="#121214", border_color="#222227")
         inp_n.pack(pady=8)
         
-        inp_p = ctk.CTkEntry(w, placeholder_text="Phone Identity Number (Must Be Unique) *", width=300, height=38, fg_color="#121214", border_color="#222227")
+        inp_p = ctk.CTkEntry(w, placeholder_text="Phone Number (optional)", width=300, height=38, fg_color="#121214", border_color="#222227")
         inp_p.pack(pady=8)
+
+        ctk.CTkLabel(w, text="Previous Balance / Udhaar (optional)", font=ctk.CTkFont(size=11), text_color="#8a8a93").pack(anchor="w", padx=50, pady=(6, 0))
+        inp_bal = ctk.CTkEntry(w, placeholder_text="e.g. -5000 (udhaar) or 2000 (advance)", width=300, height=38, fg_color="#121214", border_color="#222227")
+        inp_bal.pack(pady=8)
+        ctk.CTkLabel(w, text="Negative = customer owes us (udhaar). Positive = customer advance.",
+                     font=ctk.CTkFont(size=10), text_color="#6e6e77", wraplength=300, justify="left").pack(anchor="w", padx=50, pady=(0, 4))
         
         lbl_err = ctk.CTkLabel(w, text="", font=ctk.CTkFont(size=11))
         lbl_err.pack(pady=2)
         
         def save():
             name, phone = inp_n.get().strip(), inp_p.get().strip()
-            if not name or not phone:
-                lbl_err.configure(text="Error: Both fields are completely mandatory.", text_color="#ff4a4a"); return
-            
-            success, msg = db.add_ledger_customer(name, phone)
+            bal_raw = inp_bal.get().strip()
+
+            if not name:
+                lbl_err.configure(text="Error: Customer name is mandatory.", text_color="#ff4a4a"); return
+
+            try:
+                opening_balance = float(bal_raw) if bal_raw else 0.0
+            except ValueError:
+                lbl_err.configure(text="Error: Previous balance must be a number.", text_color="#ff4a4a"); return
+
+            success, msg = db.add_ledger_customer(name, phone, opening_balance)
             if success:
                 modal.destroy()
                 self.fetch_directory_data()
@@ -523,8 +536,8 @@ class CreditLedgerView(ctk.CTkFrame):
         inp_n.insert(0, name)
         inp_n.pack(pady=8)
 
-        inp_p = ctk.CTkEntry(w, placeholder_text="Phone Identity Number (Must Be Unique) *", width=300, height=38, fg_color="#121214", border_color="#222227")
-        inp_p.insert(0, phone)
+        inp_p = ctk.CTkEntry(w, placeholder_text="Phone Number (optional)", width=300, height=38, fg_color="#121214", border_color="#222227")
+        inp_p.insert(0, phone if phone else "")
         inp_p.pack(pady=8)
 
         lbl_err = ctk.CTkLabel(w, text="", font=ctk.CTkFont(size=11))
@@ -532,8 +545,8 @@ class CreditLedgerView(ctk.CTkFrame):
 
         def save():
             new_name, new_phone = inp_n.get().strip(), inp_p.get().strip()
-            if not new_name or not new_phone:
-                lbl_err.configure(text="Error: Both fields are completely mandatory.", text_color="#ff4a4a"); return
+            if not new_name:
+                lbl_err.configure(text="Error: Customer name is mandatory.", text_color="#ff4a4a"); return
 
             success, msg = db.update_ledger_customer(k_id, new_name, new_phone)
             if success:
