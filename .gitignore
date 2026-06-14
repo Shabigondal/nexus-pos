@@ -1,0 +1,29 @@
+# Databases (user data - personal/sensitive)
+*.db
+*.db.before_restore
+
+# Excel sync files (auto-generated, user-specific)
+products.xlsx
+khata.xlsx
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Google Drive credentials/tokens (sensitive)
+drive_credentials.json
+drive_token.pickle
+
+# Virtual environment
+venv/
+env/
+
+# PyInstaller / Inno Setup build outputs
+build/
+dist/
+Output/
+*.spec.bak
+
+# OS junk
+.DS_Store
+Thumbs.db
