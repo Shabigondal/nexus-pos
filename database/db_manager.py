@@ -740,26 +740,31 @@ def import_ledger_customers_bulk(rows):
         try:
             name, phone, opening_balance = row
             name = str(name).strip()
-            phone = str(phone).strip()
+            phone = str(phone).strip() if phone is not None else ""
 
-            if not name or not phone:
+            if not name:
                 skipped_count += 1
                 continue
+
+            # Phone is optional. Normalize blank phone to NULL so multiple
+            # customers without a phone number don't collide on the UNIQUE constraint.
+            phone_value = phone if phone else None
 
             try:
                 opening_balance = float(opening_balance)
             except (ValueError, TypeError):
                 opening_balance = 0.0
 
-            cursor.execute("SELECT khata_id FROM ledger_customers WHERE phone_number = ?", (phone,))
-            existing = cursor.fetchone()
-            if existing:
-                skipped_count += 1
-                continue
+            if phone_value is not None:
+                cursor.execute("SELECT khata_id FROM ledger_customers WHERE phone_number = ?", (phone_value,))
+                existing = cursor.fetchone()
+                if existing:
+                    skipped_count += 1
+                    continue
 
             cursor.execute(
                 "INSERT INTO ledger_customers (customer_name, phone_number, current_wallet_balance) VALUES (?, ?, ?)",
-                (name, phone, opening_balance)
+                (name, phone_value, opening_balance)
             )
             khata_id = cursor.lastrowid
 
