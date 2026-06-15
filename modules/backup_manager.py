@@ -12,6 +12,7 @@ Backup & Restore Manager
 """
 
 import os
+import io
 import shutil
 from datetime import datetime
 import tkinter.filedialog as filedialog
@@ -25,7 +26,7 @@ try:
     from google_auth_oauthlib.flow import InstalledAppFlow
     from google.auth.transport.requests import Request
     from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload
+    from googleapiclient.http import MediaIoBaseUpload
     import pickle
     GOOGLE_LIBS_AVAILABLE = True
 except ImportError:
@@ -242,7 +243,10 @@ def sync_db_to_drive():
         folder_id = _get_or_create_backup_folder(service)
 
         existing_file_id = _find_file_in_folder(service, folder_id, LIVE_SYNC_FILE_NAME)
-        media = MediaFileUpload(DB_PATH, mimetype="application/octet-stream")
+
+        with open(DB_PATH, "rb") as f:
+            file_bytes = f.read()
+        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype="application/octet-stream", resumable=False)
 
         if existing_file_id:
             # Update the existing file's content in place (same file, new data)
@@ -291,7 +295,15 @@ def upload_to_drive(parent_window=None, local_file_path=None):
             "name": os.path.basename(local_file_path),
             "parents": [folder_id],
         }
-        media = MediaFileUpload(local_file_path, mimetype="application/octet-stream")
+
+        # Read the file fully into memory first. On Windows, MediaFileUpload can keep
+        # a file handle open even after .execute() returns, which causes
+        # "WinError 32: process cannot access the file" when we try to delete the
+        # temp backup right afterwards. Using an in-memory buffer avoids that.
+        with open(local_file_path, "rb") as f:
+            file_bytes = f.read()
+
+        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype="application/octet-stream", resumable=False)
 
         service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
@@ -302,7 +314,10 @@ def upload_to_drive(parent_window=None, local_file_path=None):
         )
 
         if cleanup_temp and os.path.exists(local_file_path):
-            os.remove(local_file_path)
+            try:
+                os.remove(local_file_path)
+            except OSError:
+                pass  # non-critical: temp file will just remain on disk
 
         return True
 
