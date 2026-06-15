@@ -558,17 +558,20 @@ def CRITICAL_init_ledger_tables():
             amount REAL NOT NULL,
             closing_balance REAL NOT NULL, -- Dynamic running statement trace
             description TEXT,
-            invoice_id INTEGER DEFAULT NULL, -- Linked POS invoice for PURCHASE_DEBIT rows
+            invoice_id INTEGER, -- Links a PURCHASE_DEBIT entry to its invoice (billing_system.db) for item details
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(khata_id) REFERENCES ledger_customers(khata_id) ON DELETE CASCADE
         )
     """)
-    # Migration: add invoice_id column if older DB lacks it
-    cursor.execute("PRAGMA table_info(ledger_transactions)")
-    lt_cols = [r[1] for r in cursor.fetchall()]
-    if "invoice_id" not in lt_cols:
-        cursor.execute("ALTER TABLE ledger_transactions ADD COLUMN invoice_id INTEGER DEFAULT NULL")
     conn.commit()
+
+    # --- Migration: add invoice_id column to older ledger_transactions tables ---
+    cursor.execute("PRAGMA table_info(ledger_transactions)")
+    lt_columns = [c[1] for c in cursor.fetchall()]
+    if "invoice_id" not in lt_columns:
+        cursor.execute("ALTER TABLE ledger_transactions ADD COLUMN invoice_id INTEGER")
+        conn.commit()
+
 
     # --- Migration: older databases may have phone_number as NOT NULL UNIQUE,
     # which blocks customers without a phone number. Rebuild the table if so.
@@ -712,7 +715,9 @@ def delete_ledger_customer(khata_id):
         return False, str(e)
 
 def process_wallet_transaction(khata_id, action_type, amount, desc, invoice_id=None):
-    """Core Mathematical Matrix Engine for Running Balances"""
+    """Core Mathematical Matrix Engine for Running Balances.
+    invoice_id: optional, links this transaction (typically PURCHASE_DEBIT) to an
+    invoice in billing_system.db so the passbook can show items purchased."""
     import sqlite3
     try:
         conn = sqlite3.connect("database/pos_system.db")
@@ -778,9 +783,37 @@ def get_customer_passbook(khata_id, start_date="", end_date="", page=1, page_siz
     params.append(offset)
 
     cursor.execute(query, params)
-    res = cursor.fetchall()
+    raw_rows = cursor.fetchall()
     conn.close()
+
+    # For PURCHASE_DEBIT / OVERDRAFT_CREDIT rows with a linked invoice, attach a
+    # short "items purchased" summary (e.g. "Petrol x 5L, Mobil Oil x 2") from
+    # billing_system.db.
+    res = []
+    for timestamp, action_type, description, amount, closing_balance, invoice_id in raw_rows:
+        items_summary = ""
+        if invoice_id and action_type in ('PURCHASE_DEBIT', 'OVERDRAFT_CREDIT'):
+            items_summary = get_invoice_items_summary(invoice_id)
+        res.append((timestamp, action_type, description, amount, closing_balance, items_summary))
     return res
+
+
+def get_invoice_items_summary(invoice_id):
+    """Returns a short human-readable summary of items in an invoice,
+    e.g. 'Petrol x 5, Mobil Oil x 2'. Returns '' if not found."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT product_name, quantity FROM invoice_items WHERE invoice_id = ?
+        """, (invoice_id,))
+        items = cursor.fetchall()
+        conn.close()
+        if not items:
+            return ""
+        return ", ".join(f"{name} x {qty}" for name, qty in items)
+    except Exception:
+        return ""
 
 
 def get_customer_passbook_count(khata_id, start_date="", end_date=""):
@@ -801,59 +834,6 @@ def get_customer_passbook_count(khata_id, start_date="", end_date=""):
     total = cursor.fetchone()[0]
     conn.close()
     return total
-
-def get_passbook_purchase_items(invoice_id=None, fallback_customer=None, fallback_amount=None, fallback_timestamp=None):
-    """Return list of (product_name, quantity, sale_price, line_total) for a PURCHASE_DEBIT row.
-
-    Primary:  invoice_id directly linked (new transactions).
-    Fallback: match WALLET invoice by customer_name + net_amount + date proximity (old transactions).
-    """
-    import sqlite3
-    conn = sqlite3.connect("database/pos_system.db")
-    cursor = conn.cursor()
-
-    if invoice_id:
-        cursor.execute("""
-            SELECT product_name, quantity, sale_price, line_total
-            FROM invoice_items
-            WHERE invoice_id = ?
-            ORDER BY item_id ASC
-        """, (int(invoice_id),))
-        res = cursor.fetchall()
-        conn.close()
-        return res
-
-    # Fallback: find WALLET invoice matching customer + amount + same date
-    if fallback_customer and fallback_amount is not None and fallback_timestamp:
-        try:
-            date_part = str(fallback_timestamp)[:10]  # YYYY-MM-DD
-            cursor.execute("""
-                SELECT i.invoice_id
-                FROM invoices i
-                WHERE i.customer_name = ?
-                  AND i.payment_mode = 'WALLET'
-                  AND ABS(i.net_amount - ?) < 0.01
-                  AND date(i.date) = ?
-                ORDER BY i.invoice_id DESC
-                LIMIT 1
-            """, (fallback_customer, float(fallback_amount), date_part))
-            row = cursor.fetchone()
-            if row:
-                inv_id = row[0]
-                cursor.execute("""
-                    SELECT product_name, quantity, sale_price, line_total
-                    FROM invoice_items
-                    WHERE invoice_id = ?
-                    ORDER BY item_id ASC
-                """, (inv_id,))
-                res = cursor.fetchall()
-                conn.close()
-                return res
-        except Exception:
-            pass
-
-    conn.close()
-    return []
 
 def import_ledger_customers_bulk(rows):
     """

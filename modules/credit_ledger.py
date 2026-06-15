@@ -319,12 +319,6 @@ class CreditLedgerView(ctk.CTkFrame):
                       font=ctk.CTkFont(size=11, weight="bold"),
                       command=self.export_single_customer_xlsx).pack(side="right", padx=6, pady=6)
 
-        ctk.CTkButton(top_bar, text="🖨️ Export PDF", width=120, height=32,
-                      fg_color="#2a1f3a", text_color="#c084fc",
-                      border_color="#4a2d6a", border_width=1,
-                      font=ctk.CTkFont(size=11, weight="bold"),
-                      command=self.export_passbook_pdf).pack(side="right", padx=6, pady=6)
-
         # --- DATE FILTER BAR ---
         filter_bar = ctk.CTkFrame(self.passbook_frame, fg_color="#16161a", border_color="#222227", border_width=1, height=50)
         filter_bar.pack(fill="x", pady=(0, 10))
@@ -465,50 +459,33 @@ class CreditLedgerView(ctk.CTkFrame):
             ctk.CTkLabel(self.passbook_scroll, text="Is date range mein koi transaction nahi mili.", text_color="gray", font=ctk.CTkFont(size=12)).pack(pady=30)
             
         for row_idx, item in enumerate(logs):
-            ts, action, desc, amt, closing = item[0], item[1], item[2], item[3], item[4]
-            inv_id = item[5] if len(item) > 5 else None
+            ts, action, desc, amt, closing, items_summary = item
+            row_container = ctk.CTkFrame(self.passbook_scroll, fg_color="#18181f" if row_idx % 2 == 0 else "transparent")
+            row_container.pack(fill="x", pady=2)
 
-            # Fetch purchase items if PURCHASE_DEBIT or OVERDRAFT_CREDIT (overdraft happens when purchase causes negative balance)
-            purchase_items = []
-            if action in ("PURCHASE_DEBIT", "OVERDRAFT_CREDIT"):
-                purchase_items = db.get_passbook_purchase_items(
-                    invoice_id=inv_id,
-                    fallback_customer=name,
-                    fallback_amount=amt,
-                    fallback_timestamp=ts
-                )
+            row = ctk.CTkFrame(row_container, fg_color="transparent", height=38)
+            row.pack(fill="x")
 
-            has_items = bool(purchase_items)
-            row_height = 38 if not has_items else (38 + len(purchase_items) * 18 + 6)
-            row = ctk.CTkFrame(self.passbook_scroll, fg_color="#18181f" if row_idx % 2 == 0 else "transparent")
-            row.pack(fill="x", pady=2)
-
-            # Main data line
-            main_line = ctk.CTkFrame(row, fg_color="transparent", height=38)
-            main_line.pack(fill="x")
-            
-            ctk.CTkLabel(main_line, text=ts, width=widths[0], text_color="gray", font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
+            ctk.CTkLabel(row, text=ts, width=widths[0], text_color="gray", font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
             
             # Action Colors Parsing Matrix Tags
             act_colors = {'ADVANCE_DEPOSIT': '#4aff4a', 'CASH_WITHDRAWAL': '#ff9f43', 'PURCHASE_DEBIT': '#8ed1fc', 'OVERDRAFT_CREDIT': '#ff4a4a'}
-            ctk.CTkLabel(main_line, text=action, width=widths[1], text_color=act_colors.get(action, '#ffffff'), font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=4)
+            ctk.CTkLabel(row, text=action, width=widths[1], text_color=act_colors.get(action, '#ffffff'), font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=4)
             
-            ctk.CTkLabel(main_line, text=desc[:28], width=widths[2], anchor="w", font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
-            ctk.CTkLabel(main_line, text=f"{amt:,.1f}", width=widths[3], font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
+            ctk.CTkLabel(row, text=desc[:28], width=widths[2], anchor="w", font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
+            ctk.CTkLabel(row, text=f"{amt:,.1f}", width=widths[3], font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
             
             c_color = "#4aff4a" if closing >= 0 else "#ff4a4a"
             c_prefix = "Rs." if closing >= 0 else "-Rs."
-            ctk.CTkLabel(main_line, text=f"{c_prefix}{abs(closing):,.1f}", width=widths[4], font=ctk.CTkFont(size=11, weight="bold"), text_color=c_color).pack(side="left", padx=4)
+            ctk.CTkLabel(row, text=f"{c_prefix}{abs(closing):,.1f}", width=widths[4], font=ctk.CTkFont(size=11, weight="bold"), text_color=c_color).pack(side="left", padx=4)
 
-            # Purchase items sub-rows (only for PURCHASE_DEBIT)
-            if has_items:
-                items_frame = ctk.CTkFrame(row, fg_color="#0f1117", corner_radius=4)
-                items_frame.pack(fill="x", padx=(widths[0] + widths[1] + 12, 8), pady=(0, 4))
-                for p_name, p_qty, p_price, p_total in purchase_items:
-                    item_line = ctk.CTkFrame(items_frame, fg_color="transparent", height=18)
-                    item_line.pack(fill="x", padx=6, pady=1)
-                    ctk.CTkLabel(item_line, text=f"🛒 {p_name}", anchor="w", font=ctk.CTkFont(size=10), text_color="#a0c4ff").pack(side="left")
-                    ctk.CTkLabel(item_line, text=f"  ×{p_qty}  @Rs.{p_price:,.1f}  =  Rs.{p_total:,.1f}", anchor="w", font=ctk.CTkFont(size=10), text_color="#8a8a99").pack(side="left")
+            # Purchased items sub-row (only for purchase-related entries with linked invoice items)
+            if items_summary:
+                items_row = ctk.CTkFrame(row_container, fg_color="transparent")
+                items_row.pack(fill="x", padx=(4, 4), pady=(0, 4))
+                ctk.CTkLabel(items_row, text=f"  🛒 Items Purchased: {items_summary}",
+                             anchor="w", text_color="#8ed1fc", font=ctk.CTkFont(size=10, slant="italic")
+                             ).pack(side="left", padx=4)
 
         # Update pagination controls
         self.lbl_pb_page_info.configure(text=f"Page {self.pb_current_page} of {total_pages}  ({total} total)")
@@ -793,24 +770,9 @@ class CreditLedgerView(ctk.CTkFrame):
             "PURCHASE_DEBIT":   "8ed1fc",
             "OVERDRAFT_CREDIT": "ff4a4a",
         }
-        for ri, (ts, action, desc, amt, closing, *extra) in enumerate(logs, 4):
-            inv_id = extra[0] if extra else None
+        for ri, (ts, action, desc, amt, closing) in enumerate(logs, 4):
             fill = s["dark_fill"] if ri % 2 == 0 else s["darker_fill"]
-
-            # Build narration: append purchase items for PURCHASE_DEBIT or OVERDRAFT_CREDIT (purchase that went negative)
-            narration = desc or ""
-            if action in ("PURCHASE_DEBIT", "OVERDRAFT_CREDIT"):
-                items = db.get_passbook_purchase_items(
-                    invoice_id=inv_id,
-                    fallback_customer=cust_name,
-                    fallback_amount=amt,
-                    fallback_timestamp=ts
-                )
-                if items:
-                    parts = [f"{p_name} ×{p_qty} @Rs.{p_price:,.1f}" for p_name, p_qty, p_price, _ in items]
-                    narration = (narration + " | " if narration else "") + " | ".join(parts)
-
-            row_vals = [len(logs) - ri + 4, ts, action, narration, round(amt, 2), round(closing, 2)]
+            row_vals = [len(logs) - ri + 4, ts, action, desc, round(amt, 2), round(closing, 2)]
             for ci, val in enumerate(row_vals, 1):
                 c = ws.cell(row=ri, column=ci, value=val)
                 c.fill = fill; c.border = s["border"]
@@ -896,118 +858,6 @@ class CreditLedgerView(ctk.CTkFrame):
         col_widths = [13, 20, 14, 16, 8, 18, 14, 40]
         for i, w in enumerate(col_widths, 1):
             ws.column_dimensions[get_column_letter(i)].width = w
-
-    # ── EXPORT: Passbook PDF ─────────────────────────────────────────
-    def export_passbook_pdf(self):
-        if not self.active_customer:
-            messagebox.showwarning("No Customer", "Pehle directory se kisi customer ko focus karein.")
-            return
-        k_id, name, phone, balance = self.active_customer
-
-        from tkinter import filedialog
-        save_path = filedialog.asksaveasfilename(
-            defaultextension=".pdf",
-            filetypes=[("PDF Files", "*.pdf")],
-            initialfile=f"Passbook_{name.replace(' ', '_')}_KH{k_id:04d}.pdf",
-            title="Save Passbook PDF"
-        )
-        if not save_path:
-            return
-
-        start_date = self.inp_pb_from.get().strip()
-        end_date = self.inp_pb_to.get().strip()
-        logs = db.get_customer_passbook(k_id, start_date, end_date, page=1, page_size=10**9)
-
-        from modules.pdf_export import build_table_html, export_html_to_pdf
-        import datetime
-
-        bal_str = f"Rs. {balance:,.2f}" if balance >= 0 else f"-Rs. {abs(balance):,.2f}"
-        subtitle = (
-            f"Customer: {name}  |  KH-{k_id:04d}  |  Phone: {phone or 'N/A'}  |  "
-            f"Current Balance: {bal_str}  |  "
-            f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-
-        action_labels = {
-            'ADVANCE_DEPOSIT': 'ADVANCE DEPOSIT',
-            'CASH_WITHDRAWAL': 'CASH WITHDRAWAL',
-            'PURCHASE_DEBIT':  'PURCHASE DEBIT',
-            'OVERDRAFT_CREDIT':'OVERDRAFT CREDIT',
-        }
-        action_colors_html = {
-            'ADVANCE_DEPOSIT':  'green',
-            'CASH_WITHDRAWAL':  '',
-            'PURCHASE_DEBIT':   '',
-            'OVERDRAFT_CREDIT': 'red',
-        }
-
-        headers = ["#", "Timestamp", "Action Type", "Narration / Items", "Amount (Rs.)", "Closing Balance (Rs.)"]
-        col_classes = ["center", "center", "center bold", "", "right", "right bold"]
-        col_widths = [4, 17, 16, 38, 12, 13]
-
-        rows_html = []
-        for i, row_data in enumerate(reversed(logs), 1):
-            ts, action, desc, amt, closing = row_data[0], row_data[1], row_data[2], row_data[3], row_data[4]
-            inv_id = row_data[5] if len(row_data) > 5 else None
-
-            # Build narration cell — add items list for PURCHASE_DEBIT or OVERDRAFT_CREDIT (purchase that went negative)
-            narration_parts = [desc or ""]
-            if action in ("PURCHASE_DEBIT", "OVERDRAFT_CREDIT"):
-                items = db.get_passbook_purchase_items(
-                    invoice_id=inv_id,
-                    fallback_customer=name,
-                    fallback_amount=amt,
-                    fallback_timestamp=ts
-                )
-                if items:
-                    narration_parts.append("")
-                    for p_name, p_qty, p_price, p_total in items:
-                        narration_parts.append(f"  • {p_name}  ×{p_qty}  @ Rs.{p_price:,.1f}  =  Rs.{p_total:,.1f}")
-
-            narration_text = "\n".join(narration_parts)
-
-            cl_class = "green" if closing >= 0 else "red"
-            cl_prefix = "Rs." if closing >= 0 else "-Rs."
-            act_class = action_colors_html.get(action, "")
-
-            rows_html.append([
-                str(i),
-                ts,
-                (action_labels.get(action, action), act_class),
-                narration_text,
-                f"Rs. {amt:,.2f}",
-                (f"{cl_prefix}{abs(closing):,.2f}", cl_class),
-            ])
-
-        # Summary box
-        total_deposits    = sum(r[3] for r in logs if r[1] == 'ADVANCE_DEPOSIT')
-        total_withdrawals = sum(r[3] for r in logs if r[1] == 'CASH_WITHDRAWAL')
-        total_purchases   = sum(r[3] for r in logs if r[1] in ('PURCHASE_DEBIT', 'OVERDRAFT_CREDIT') and (r[5] if len(r) > 5 else None))
-        summary = [
-            ("Total Transactions:", str(len(logs))),
-            ("Total Deposits (ADVANCE_DEPOSIT):", f"Rs. {total_deposits:,.2f}"),
-            ("Total Withdrawals (CASH_WITHDRAWAL):", f"Rs. {total_withdrawals:,.2f}"),
-            ("Total Purchases (PURCHASE_DEBIT):", f"Rs. {total_purchases:,.2f}"),
-            ("Current Wallet Balance:", bal_str),
-        ]
-
-        html = build_table_html(
-            title=f"Passbook Statement — {name} [KH-{k_id:04d}]",
-            subtitle=subtitle,
-            headers=headers,
-            rows=rows_html,
-            col_classes=col_classes,
-            col_widths=col_widths,
-            orientation="landscape",
-            summary_rows=summary,
-            footer_note="Nexus POS — Credit Ledger & Khata Management | Auto-generated document"
-        )
-
-        ok, msg = export_html_to_pdf(html, save_path)
-        if ok:
-            messagebox.showinfo("PDF Exported", f"Passbook PDF successfully saved!\n\n{save_path}")
-        else:
-            messagebox.showerror("Export Failed", msg)
 
     # ── EXPORT: Single Customer ──────────────────────────────────────
     def export_single_customer_xlsx(self):
