@@ -61,6 +61,8 @@ tr:nth-child(even) td {{
 .bold {{ font-weight: bold; }}
 .green {{ color: #1a8a3a; font-weight: bold; }}
 .red {{ color: #c0392b; font-weight: bold; }}
+.orange {{ color: #d4820a; font-weight: bold; }}
+.blue {{ color: #1a5fa8; font-weight: bold; }}
 .totals-row td {{
     background-color: #dbe6f3 !important;
     font-weight: bold;

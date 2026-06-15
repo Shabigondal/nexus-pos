@@ -313,11 +313,17 @@ class CreditLedgerView(ctk.CTkFrame):
         
         ctk.CTkButton(top_bar, text="⬅️ Back To Directory", width=130, fg_color="#121214", border_color="#222227", border_width=1, command=self.switch_to_directory_tab).pack(side="right", padx=15, pady=6)
         
-        ctk.CTkButton(top_bar, text="📥 Export This Customer", width=155, height=32,
+        ctk.CTkButton(top_bar, text="📥 Export Excel", width=130, height=32,
                       fg_color="#1c3a27", text_color="#4aff4a",
                       border_color="#2d5a3b", border_width=1,
                       font=ctk.CTkFont(size=11, weight="bold"),
                       command=self.export_single_customer_xlsx).pack(side="right", padx=6, pady=6)
+
+        ctk.CTkButton(top_bar, text="📄 Export PDF", width=120, height=32,
+                      fg_color="#3a1c1c", text_color="#ff9f9f",
+                      border_color="#5a2d2d", border_width=1,
+                      font=ctk.CTkFont(size=11, weight="bold"),
+                      command=self.export_single_customer_pdf).pack(side="right", padx=4, pady=6)
 
         # --- DATE FILTER BAR ---
         filter_bar = ctk.CTkFrame(self.passbook_frame, fg_color="#16161a", border_color="#222227", border_width=1, height=50)
@@ -481,11 +487,16 @@ class CreditLedgerView(ctk.CTkFrame):
 
             # Purchased items sub-row (only for purchase-related entries with linked invoice items)
             if items_summary:
-                items_row = ctk.CTkFrame(row_container, fg_color="transparent")
-                items_row.pack(fill="x", padx=(4, 4), pady=(0, 4))
-                ctk.CTkLabel(items_row, text=f"  🛒 Items Purchased: {items_summary}",
-                             anchor="w", text_color="#8ed1fc", font=ctk.CTkFont(size=10, slant="italic")
-                             ).pack(side="left", padx=4)
+                items_row = ctk.CTkFrame(row_container, fg_color="#14181f", corner_radius=4)
+                items_row.pack(fill="x", padx=8, pady=(0, 6))
+                ctk.CTkLabel(items_row, text="🛒",
+                             font=ctk.CTkFont(size=11), text_color="#8ed1fc",
+                             width=22, anchor="center").pack(side="left", padx=(8, 2), pady=4)
+                ctk.CTkLabel(items_row,
+                             text=f"Items Purchased: {items_summary}",
+                             anchor="w", justify="left", wraplength=820,
+                             text_color="#a8d8f8", font=ctk.CTkFont(size=10, slant="italic")
+                             ).pack(side="left", fill="x", expand=True, padx=(2, 8), pady=4)
 
         # Update pagination controls
         self.lbl_pb_page_info.configure(text=f"Page {self.pb_current_page} of {total_pages}  ({total} total)")
@@ -770,7 +781,7 @@ class CreditLedgerView(ctk.CTkFrame):
             "PURCHASE_DEBIT":   "8ed1fc",
             "OVERDRAFT_CREDIT": "ff4a4a",
         }
-        for ri, (ts, action, desc, amt, closing) in enumerate(logs, 4):
+        for ri, (ts, action, desc, amt, closing, items_summary) in enumerate(logs, 4):
             fill = s["dark_fill"] if ri % 2 == 0 else s["darker_fill"]
             row_vals = [len(logs) - ri + 4, ts, action, desc, round(amt, 2), round(closing, 2)]
             for ci, val in enumerate(row_vals, 1):
@@ -903,6 +914,106 @@ class CreditLedgerView(ctk.CTkFrame):
             )
             try: os.startfile(save_path)
             except Exception: pass
+
+        except Exception as e:
+            messagebox.showerror("Export Failed", str(e))
+
+    # ── EXPORT: Single Customer as PDF ─────────────────────────────
+    def export_single_customer_pdf(self):
+        from modules.pdf_export import build_table_html, export_html_to_pdf
+
+        if not self.active_customer:
+            messagebox.showwarning("No Customer", "Pehle directory se kisi customer ko focus karein.")
+            return
+
+        k_id, name, phone, balance = self.active_customer
+
+        safe_name = "".join(c for c in name if c.isalnum() or c in " _-")[:20].strip()
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF File", "*.pdf")],
+            initialfile=f"Passbook_{safe_name}_{datetime.date.today()}.pdf",
+            title="Export Passbook as PDF"
+        )
+        if not save_path: return
+
+        try:
+            # ── Fetch all passbook logs ──────────────────────────
+            logs = db.get_customer_passbook(k_id, page=1, page_size=10**9)
+
+            # ── Balance header values ────────────────────────────
+            bal_str = f"Rs. {balance:,.2f}" if balance >= 0 else f"-Rs. {abs(balance):,.2f}"
+            bal_cls = "green" if balance >= 0 else "red"
+            export_dt = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # ── Build passbook rows ──────────────────────────────
+            action_color_map = {
+                "ADVANCE_DEPOSIT":  "green",
+                "CASH_WITHDRAWAL":  "orange",
+                "PURCHASE_DEBIT":   "blue",
+                "OVERDRAFT_CREDIT": "red",
+            }
+
+            pb_headers = ["#", "Timestamp", "Action Type", "Narration / Description", "Items Detail", "Amount (Rs.)", "Closing Balance (Rs.)"]
+            pb_col_classes = ["center", "center", "center", "", "", "right", "right"]
+            pb_col_widths  = [5, 18, 16, 24, 25, 14, 16]
+
+            pb_rows = []
+            for idx, (ts, action, desc, amt, closing, items_summary) in enumerate(logs, 1):
+                act_cls = action_color_map.get(action, "")
+                c_cls   = "green" if closing >= 0 else "red"
+                c_prefix = "Rs." if closing >= 0 else "-Rs."
+                pb_rows.append([
+                    str(idx),
+                    ts,
+                    (action, act_cls),
+                    desc,
+                    items_summary if items_summary else "—",
+                    f"{amt:,.2f}",
+                    (f"{c_prefix}{abs(closing):,.2f}", c_cls),
+                ])
+
+            # ── Summary block ────────────────────────────────────
+            total_deposits    = sum(row[3] for row in logs if row[1] == "ADVANCE_DEPOSIT")
+            total_withdrawals = sum(row[3] for row in logs if row[1] == "CASH_WITHDRAWAL")
+            total_purchases   = sum(row[3] for row in logs if row[1] in ("PURCHASE_DEBIT", "OVERDRAFT_CREDIT"))
+
+            summary_rows = [
+                ("Customer Name:",   name),
+                ("Khata ID:",        f"KH-{k_id:04d}"),
+                ("Phone:",           phone if phone else "—"),
+                ("Current Balance:", bal_str),
+                ("Total Transactions:", str(len(logs))),
+                ("Total Deposits:",    f"Rs. {total_deposits:,.2f}"),
+                ("Total Withdrawals:", f"Rs. {total_withdrawals:,.2f}"),
+                ("Total Purchases:",   f"Rs. {total_purchases:,.2f}"),
+                ("Exported On:",       export_dt),
+            ]
+
+            # ── Build HTML and export ────────────────────────────
+            html = build_table_html(
+                title=f"Ledger Passbook Statement — {name}",
+                subtitle=f"KH-{k_id:04d}  |  {phone if phone else '—'}  |  Balance: {bal_str}  |  Exported: {export_dt}",
+                headers=pb_headers,
+                rows=pb_rows,
+                col_classes=pb_col_classes,
+                orientation="landscape",
+                summary_rows=summary_rows,
+                col_widths=pb_col_widths,
+            )
+
+            success, msg = export_html_to_pdf(html, save_path)
+            if success:
+                messagebox.showinfo("Export Successful ✅",
+                    f"{name} ka passbook PDF export ho gaya!\n\n"
+                    f"• Total Transactions: {len(logs)}\n"
+                    f"• Balance: {bal_str}\n\n"
+                    f"File:\n{save_path}"
+                )
+                try: os.startfile(save_path)
+                except Exception: pass
+            else:
+                messagebox.showerror("PDF Export Failed", msg)
 
         except Exception as e:
             messagebox.showerror("Export Failed", str(e))
