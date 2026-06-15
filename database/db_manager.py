@@ -220,20 +220,33 @@ def get_dashboard_summary():
     cursor.execute("SELECT COUNT(*) FROM inventory")
     total_products = cursor.fetchone()[0]
 
-    # --- Khata / Wallet aggregates ---
-    cursor.execute("SELECT COUNT(*) FROM ledger_customers")
-    total_khatas = cursor.fetchone()[0]
+    conn.close()
 
-    cursor.execute("""
-        SELECT
-            COALESCE(SUM(CASE WHEN current_wallet_balance > 0 THEN current_wallet_balance ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN current_wallet_balance < 0 THEN current_wallet_balance ELSE 0 END), 0)
-        FROM ledger_customers
-    """)
-    total_advance, total_udhaar = cursor.fetchone()
+    # --- Khata / Wallet aggregates (ledger_customers lives in a separate DB file) ---
+    import sqlite3
+    total_khatas = 0
+    total_advance = 0.0
+    total_udhaar = 0.0
+    try:
+        ledger_conn = sqlite3.connect("database/pos_system.db")
+        ledger_cursor = ledger_conn.cursor()
+
+        ledger_cursor.execute("SELECT COUNT(*) FROM ledger_customers")
+        total_khatas = ledger_cursor.fetchone()[0]
+
+        ledger_cursor.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN current_wallet_balance > 0 THEN current_wallet_balance ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN current_wallet_balance < 0 THEN current_wallet_balance ELSE 0 END), 0)
+            FROM ledger_customers
+        """)
+        total_advance, total_udhaar = ledger_cursor.fetchone()
+        ledger_conn.close()
+    except Exception:
+        pass
+
     net_wallet_total = (total_advance or 0.0) + (total_udhaar or 0.0)
 
-    conn.close()
     return {
         "total_revenue": total_revenue or 0.0,
         "total_profit": total_profit or 0.0,
