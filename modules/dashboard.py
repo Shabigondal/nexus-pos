@@ -29,8 +29,12 @@ class DashboardView(ctk.CTkFrame):
         )
         sub_lbl.pack(anchor="w", padx=5, pady=(0, 20))
 
+        # --- SCROLLABLE CONTENT (cards + chart) ---
+        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
         # --- STAT CARDS ROW ---
-        cards_row = ctk.CTkFrame(self, fg_color="transparent")
+        cards_row = ctk.CTkFrame(scroll, fg_color="transparent")
         cards_row.pack(fill="x", padx=5, pady=(0, 25))
         cards_row.grid_columnconfigure((0, 1, 2, 3), weight=1, uniform="cards")
 
@@ -40,7 +44,7 @@ class DashboardView(ctk.CTkFrame):
         self.create_stat_card(cards_row, 3, "Low Stock Items", f"{summary['low_stock_count']}", "#ff4a4a")
 
         # --- KHATA / WALLET STAT CARDS ROW ---
-        khata_cards_row = ctk.CTkFrame(self, fg_color="transparent")
+        khata_cards_row = ctk.CTkFrame(scroll, fg_color="transparent")
         khata_cards_row.pack(fill="x", padx=5, pady=(0, 25))
         khata_cards_row.grid_columnconfigure((0, 1, 2, 3), weight=1, uniform="khata_cards")
 
@@ -57,8 +61,8 @@ class DashboardView(ctk.CTkFrame):
         self.create_stat_card(khata_cards_row, 3, "Total Khata Accounts", f"{summary.get('total_khatas', 0)}", "#a78bfa")
 
         # --- CHART PANEL ---
-        chart_panel = ctk.CTkFrame(self, fg_color="#121214", border_color="#222227", border_width=1, corner_radius=8)
-        chart_panel.pack(fill="both", expand=True, padx=5, pady=(0, 10))
+        chart_panel = ctk.CTkFrame(scroll, fg_color="#121214", border_color="#222227", border_width=1, corner_radius=8, height=400)
+        chart_panel.pack(fill="x", padx=5, pady=(0, 10))
 
         chart_title = ctk.CTkLabel(
             chart_panel,

@@ -122,13 +122,9 @@ class EnterpriseBillingApp(ctk.CTk):
     # --- ARCHITECTURE CONTROLLER ROUTING MODULES ---
     def route_dashboard(self):
         self.reset_workspace()
-        shop_name = get_setting("shop_name", "Afzal Petrol Agency")
-
-        header = ctk.CTkLabel(self.workspace, text=f"Welcome, {shop_name}", font=ctk.CTkFont(family="Arial", size=20, weight="bold"), text_color="#ffffff")
-        header.pack(anchor="w", padx=30, pady=(25, 10))
 
         dashboard_panel = DashboardView(self.workspace)
-        dashboard_panel.pack(fill="both", expand=True, padx=30, pady=(0, 30))
+        dashboard_panel.pack(fill="both", expand=True, padx=30, pady=(25, 30))
 
     def route_billing(self):
         self.reset_workspace()
