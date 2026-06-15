@@ -468,9 +468,9 @@ class CreditLedgerView(ctk.CTkFrame):
             ts, action, desc, amt, closing = item[0], item[1], item[2], item[3], item[4]
             inv_id = item[5] if len(item) > 5 else None
 
-            # Fetch purchase items if PURCHASE_DEBIT
+            # Fetch purchase items if PURCHASE_DEBIT or OVERDRAFT_CREDIT (overdraft happens when purchase causes negative balance)
             purchase_items = []
-            if action == "PURCHASE_DEBIT":
+            if action in ("PURCHASE_DEBIT", "OVERDRAFT_CREDIT"):
                 purchase_items = db.get_passbook_purchase_items(
                     invoice_id=inv_id,
                     fallback_customer=name,
@@ -797,9 +797,9 @@ class CreditLedgerView(ctk.CTkFrame):
             inv_id = extra[0] if extra else None
             fill = s["dark_fill"] if ri % 2 == 0 else s["darker_fill"]
 
-            # Build narration: append purchase items for PURCHASE_DEBIT
+            # Build narration: append purchase items for PURCHASE_DEBIT or OVERDRAFT_CREDIT (purchase that went negative)
             narration = desc or ""
-            if action == "PURCHASE_DEBIT":
+            if action in ("PURCHASE_DEBIT", "OVERDRAFT_CREDIT"):
                 items = db.get_passbook_purchase_items(
                     invoice_id=inv_id,
                     fallback_customer=cust_name,
@@ -950,9 +950,9 @@ class CreditLedgerView(ctk.CTkFrame):
             ts, action, desc, amt, closing = row_data[0], row_data[1], row_data[2], row_data[3], row_data[4]
             inv_id = row_data[5] if len(row_data) > 5 else None
 
-            # Build narration cell — add items list for PURCHASE_DEBIT
+            # Build narration cell — add items list for PURCHASE_DEBIT or OVERDRAFT_CREDIT (purchase that went negative)
             narration_parts = [desc or ""]
-            if action == "PURCHASE_DEBIT":
+            if action in ("PURCHASE_DEBIT", "OVERDRAFT_CREDIT"):
                 items = db.get_passbook_purchase_items(
                     invoice_id=inv_id,
                     fallback_customer=name,
@@ -982,7 +982,7 @@ class CreditLedgerView(ctk.CTkFrame):
         # Summary box
         total_deposits    = sum(r[3] for r in logs if r[1] == 'ADVANCE_DEPOSIT')
         total_withdrawals = sum(r[3] for r in logs if r[1] == 'CASH_WITHDRAWAL')
-        total_purchases   = sum(r[3] for r in logs if r[1] == 'PURCHASE_DEBIT')
+        total_purchases   = sum(r[3] for r in logs if r[1] in ('PURCHASE_DEBIT', 'OVERDRAFT_CREDIT') and (r[5] if len(r) > 5 else None))
         summary = [
             ("Total Transactions:", str(len(logs))),
             ("Total Deposits (ADVANCE_DEPOSIT):", f"Rs. {total_deposits:,.2f}"),
