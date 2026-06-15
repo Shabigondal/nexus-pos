@@ -267,15 +267,6 @@ class CreditLedgerView(ctk.CTkFrame):
         self.btn_withdraw.configure(state="normal")
         self.btn_purchase_adj.configure(state="normal")
 
-        # Reset any stale passbook date/month filters left over from a
-        # previously viewed customer, so new transactions aren't hidden
-        # by an out-of-range date filter.
-        if hasattr(self, "inp_pb_from"):
-            self.inp_pb_from.delete(0, "end")
-            self.inp_pb_to.delete(0, "end")
-            self.pb_month_dropdown.set("All")
-            self.pb_current_page = 1
-
     def execute_operation(self, txn_type):
         if not self.active_customer: return
         amt_s = self.inp_op_amount.get().strip()
