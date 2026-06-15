@@ -113,6 +113,12 @@ class CreditLedgerView(ctk.CTkFrame):
                       font=ctk.CTkFont(weight="bold"),
                       command=self.export_all_khata_to_xlsx).pack(side="right", padx=6, pady=10)
 
+        ctk.CTkButton(search_box, text="📄 Export PDF", height=38, width=125,
+                      fg_color="#3a1c1c", text_color="#ff9f9f",
+                      border_color="#5a2d2d", border_width=1,
+                      font=ctk.CTkFont(weight="bold"),
+                      command=self.export_all_khata_to_pdf).pack(side="right", padx=6, pady=10)
+
         ctk.CTkButton(search_box, text="📥 Import Sheet", height=38, width=130,
                       fg_color="#1f293d", text_color="#8ed1fc",
                       border_color="#2b3a4a", border_width=1,
@@ -934,7 +940,7 @@ class CreditLedgerView(ctk.CTkFrame):
             for ri, cust in enumerate(all_customers, 3):
                 k_id, cust_name, phone, balance, created_at = cust
                 fill = s["dark_fill"] if ri % 2 == 0 else s["darker_fill"]
-                status = "✅ Positive" if balance >= 0 else "⚠️ Overdraft"
+                status = "✅ Positive" if balance >= 0 else "🔴 Udhaar"
                 row_vals = [f"KH-{k_id:04d}", cust_name, phone, round(balance, 2), created_at, status]
                 for ci, val in enumerate(row_vals, 1):
                     c = ws_dir.cell(row=ri, column=ci, value=val)
@@ -943,10 +949,84 @@ class CreditLedgerView(ctk.CTkFrame):
                         c.number_format = '#,##0.00'; c.alignment = s["right"]
                         c.font = Font(color="4aff4a" if balance >= 0 else "ff4a4a", bold=True, name="Arial", size=10)
                     elif ci == 6:
-                        c.font = Font(color="4aff4a" if balance >= 0 else "ff9f43", name="Arial", size=10)
+                        c.font = Font(color="4aff4a" if balance >= 0 else "ff4a4a", name="Arial", size=10)
                         c.alignment = s["center"]
                     else:
                         c.font = s["body_font"]
+
+            # ── Totals row ──────────────────────────────────────────
+            total_advance = sum(c[3] for c in all_customers if c[3] > 0)
+            total_udhaar = sum(c[3] for c in all_customers if c[3] < 0)
+            net_total = total_advance + total_udhaar
+
+            totals_row_idx = 3 + len(all_customers) + 1
+            ws_dir.merge_cells(start_row=totals_row_idx, start_column=1, end_row=totals_row_idx, end_column=3)
+            c = ws_dir.cell(row=totals_row_idx, column=1, value="TOTAL (Net Wallet — All Khata)")
+            c.font = Font(color="FFFFFF", bold=True, name="Arial", size=11)
+            c.fill = PatternFill("solid", fgColor="1e3a5f")
+            c.alignment = s["right"]; c.border = s["border"]
+            for col in (2, 3):
+                ws_dir.cell(row=totals_row_idx, column=col).fill = PatternFill("solid", fgColor="1e3a5f")
+                ws_dir.cell(row=totals_row_idx, column=col).border = s["border"]
+
+            c = ws_dir.cell(row=totals_row_idx, column=4, value=round(net_total, 2))
+            c.number_format = '#,##0.00'; c.alignment = s["right"]; c.border = s["border"]
+            c.fill = PatternFill("solid", fgColor="1e3a5f")
+            c.font = Font(color="4aff4a" if net_total >= 0 else "ff4a4a", bold=True, name="Arial", size=11)
+            for col in (5, 6):
+                ws_dir.cell(row=totals_row_idx, column=col).fill = PatternFill("solid", fgColor="1e3a5f")
+                ws_dir.cell(row=totals_row_idx, column=col).border = s["border"]
+
+            # Total Advance (Credit) row
+            adv_row_idx = totals_row_idx + 1
+            ws_dir.merge_cells(start_row=adv_row_idx, start_column=1, end_row=adv_row_idx, end_column=3)
+            c = ws_dir.cell(row=adv_row_idx, column=1, value="Total Advance (Credit / Positive)")
+            c.font = s["body_font"]; c.alignment = s["right"]; c.border = s["border"]
+            c.fill = s["dark_fill"]
+            for col in (2, 3):
+                ws_dir.cell(row=adv_row_idx, column=col).fill = s["dark_fill"]
+                ws_dir.cell(row=adv_row_idx, column=col).border = s["border"]
+            c = ws_dir.cell(row=adv_row_idx, column=4, value=round(total_advance, 2))
+            c.number_format = '#,##0.00'; c.alignment = s["right"]; c.border = s["border"]
+            c.fill = s["dark_fill"]
+            c.font = Font(color="4aff4a", bold=True, name="Arial", size=10)
+            for col in (5, 6):
+                ws_dir.cell(row=adv_row_idx, column=col).fill = s["dark_fill"]
+                ws_dir.cell(row=adv_row_idx, column=col).border = s["border"]
+
+            # Total Udhaar (Debit) row
+            udhaar_row_idx = adv_row_idx + 1
+            ws_dir.merge_cells(start_row=udhaar_row_idx, start_column=1, end_row=udhaar_row_idx, end_column=3)
+            c = ws_dir.cell(row=udhaar_row_idx, column=1, value="Total Udhaar (Debit / Negative)")
+            c.font = s["body_font"]; c.alignment = s["right"]; c.border = s["border"]
+            c.fill = s["darker_fill"]
+            for col in (2, 3):
+                ws_dir.cell(row=udhaar_row_idx, column=col).fill = s["darker_fill"]
+                ws_dir.cell(row=udhaar_row_idx, column=col).border = s["border"]
+            c = ws_dir.cell(row=udhaar_row_idx, column=4, value=round(total_udhaar, 2))
+            c.number_format = '#,##0.00'; c.alignment = s["right"]; c.border = s["border"]
+            c.fill = s["darker_fill"]
+            c.font = Font(color="ff4a4a", bold=True, name="Arial", size=10)
+            for col in (5, 6):
+                ws_dir.cell(row=udhaar_row_idx, column=col).fill = s["darker_fill"]
+                ws_dir.cell(row=udhaar_row_idx, column=col).border = s["border"]
+
+            # Total Khata Accounts row
+            count_row_idx = udhaar_row_idx + 1
+            ws_dir.merge_cells(start_row=count_row_idx, start_column=1, end_row=count_row_idx, end_column=3)
+            c = ws_dir.cell(row=count_row_idx, column=1, value="Total Khata Accounts")
+            c.font = s["body_font"]; c.alignment = s["right"]; c.border = s["border"]
+            c.fill = s["dark_fill"]
+            for col in (2, 3):
+                ws_dir.cell(row=count_row_idx, column=col).fill = s["dark_fill"]
+                ws_dir.cell(row=count_row_idx, column=col).border = s["border"]
+            c = ws_dir.cell(row=count_row_idx, column=4, value=len(all_customers))
+            c.alignment = s["right"]; c.border = s["border"]
+            c.fill = s["dark_fill"]
+            c.font = Font(color="f1f5f9", bold=True, name="Arial", size=10)
+            for col in (5, 6):
+                ws_dir.cell(row=count_row_idx, column=col).fill = s["dark_fill"]
+                ws_dir.cell(row=count_row_idx, column=col).border = s["border"]
 
             dir_col_widths = [12, 25, 16, 20, 20, 14]
             for i, w in enumerate(dir_col_widths, 1):
@@ -977,6 +1057,83 @@ class CreditLedgerView(ctk.CTkFrame):
             )
             try: os.startfile(save_path)
             except Exception: pass
+
+        except Exception as e:
+            messagebox.showerror("Export Failed", str(e))
+
+    def export_all_khata_to_pdf(self):
+        """Exports the Khata Master Directory (with totals) as a printable PDF."""
+        from modules.pdf_export import build_table_html, export_html_to_pdf
+
+        all_customers = db.get_all_ledger_customers_full()
+        if not all_customers:
+            messagebox.showwarning("No Data", "Koi bhi khata customer register nahi hai abhi.")
+            return
+
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF File", "*.pdf")],
+            initialfile=f"AllKhata_Export_{datetime.date.today()}.pdf",
+            title="Export All Khata Accounts (PDF)"
+        )
+        if not save_path: return
+
+        try:
+            total_advance = sum(c[3] for c in all_customers if c[3] > 0)
+            total_udhaar = sum(c[3] for c in all_customers if c[3] < 0)
+            net_total = total_advance + total_udhaar
+
+            headers = ["Khata ID", "Customer Name", "Phone", "Wallet Balance (Rs.)", "Account Opened", "Status"]
+            col_classes = ["center", "", "center", "right", "center", "center"]
+
+            rows = []
+            for cust in all_customers:
+                k_id, cust_name, phone, balance, created_at = cust
+                bal_text = f"{balance:,.2f}"
+                bal_cls = "green" if balance >= 0 else "red"
+                status = "Positive" if balance >= 0 else "Udhaar"
+                status_cls = "green" if balance >= 0 else "red"
+                rows.append([
+                    f"KH-{k_id:04d}",
+                    cust_name,
+                    phone if phone else "—",
+                    (bal_text, bal_cls),
+                    created_at,
+                    (status, status_cls),
+                ])
+
+            net_cls = "green" if net_total >= 0 else "red"
+            totals_row = [
+                ("TOTAL (Net Wallet)", "bold"), "", "",
+                (f"{net_total:,.2f}", f"bold {net_cls}"),
+                "", ""
+            ]
+
+            summary_rows = [
+                ("Total Khata Accounts:", f"{len(all_customers)}"),
+                ("Total Advance (Credit / Positive):", f"Rs. {total_advance:,.2f}"),
+                ("Total Udhaar (Debit / Negative):", f"-Rs. {abs(total_udhaar):,.2f}"),
+                ("Net Wallet (All Khata):", f"Rs. {net_total:,.2f}" if net_total >= 0 else f"-Rs. {abs(net_total):,.2f}"),
+            ]
+
+            html = build_table_html(
+                title="Khata Master Directory",
+                subtitle=f"Generated on {datetime.date.today()}",
+                headers=headers,
+                rows=rows,
+                col_classes=col_classes,
+                orientation="auto",
+                summary_rows=summary_rows,
+                totals_row=totals_row,
+            )
+
+            success, msg = export_html_to_pdf(html, save_path)
+            if success:
+                messagebox.showinfo("Export Successful ✅", f"Khata directory PDF saved!\n\n{msg}")
+                try: os.startfile(save_path)
+                except Exception: pass
+            else:
+                messagebox.showerror("PDF Export Failed", msg)
 
         except Exception as e:
             messagebox.showerror("Export Failed", str(e))

@@ -39,6 +39,23 @@ class DashboardView(ctk.CTkFrame):
         self.create_stat_card(cards_row, 2, "Total Invoices", f"{summary['total_invoices']}", "#f5a623")
         self.create_stat_card(cards_row, 3, "Low Stock Items", f"{summary['low_stock_count']}", "#ff4a4a")
 
+        # --- KHATA / WALLET STAT CARDS ROW ---
+        khata_cards_row = ctk.CTkFrame(self, fg_color="transparent")
+        khata_cards_row.pack(fill="x", padx=5, pady=(0, 25))
+        khata_cards_row.grid_columnconfigure((0, 1, 2, 3), weight=1, uniform="khata_cards")
+
+        net_wallet_total = summary.get('net_wallet_total', 0.0)
+        total_advance = summary.get('total_advance', 0.0)
+        total_udhaar = summary.get('total_udhaar', 0.0)
+
+        net_wallet_color = "#4aff8a" if net_wallet_total >= 0 else "#ff4a4a"
+        net_wallet_display = f"Rs. {net_wallet_total:,.2f}" if net_wallet_total >= 0 else f"-Rs. {abs(net_wallet_total):,.2f}"
+
+        self.create_stat_card(khata_cards_row, 0, "Net Wallet (All Khata)", net_wallet_display, net_wallet_color)
+        self.create_stat_card(khata_cards_row, 1, "Total Advance (Credit)", f"Rs. {total_advance:,.2f}", "#4aff8a")
+        self.create_stat_card(khata_cards_row, 2, "Total Udhaar (Debit)", f"-Rs. {abs(total_udhaar):,.2f}", "#ff4a4a")
+        self.create_stat_card(khata_cards_row, 3, "Total Khata Accounts", f"{summary.get('total_khatas', 0)}", "#a78bfa")
+
         # --- CHART PANEL ---
         chart_panel = ctk.CTkFrame(self, fg_color="#121214", border_color="#222227", border_width=1, corner_radius=8)
         chart_panel.pack(fill="both", expand=True, padx=5, pady=(0, 10))

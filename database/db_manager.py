@@ -220,13 +220,30 @@ def get_dashboard_summary():
     cursor.execute("SELECT COUNT(*) FROM inventory")
     total_products = cursor.fetchone()[0]
 
+    # --- Khata / Wallet aggregates ---
+    cursor.execute("SELECT COUNT(*) FROM ledger_customers")
+    total_khatas = cursor.fetchone()[0]
+
+    cursor.execute("""
+        SELECT
+            COALESCE(SUM(CASE WHEN current_wallet_balance > 0 THEN current_wallet_balance ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN current_wallet_balance < 0 THEN current_wallet_balance ELSE 0 END), 0)
+        FROM ledger_customers
+    """)
+    total_advance, total_udhaar = cursor.fetchone()
+    net_wallet_total = (total_advance or 0.0) + (total_udhaar or 0.0)
+
     conn.close()
     return {
         "total_revenue": total_revenue or 0.0,
         "total_profit": total_profit or 0.0,
         "total_invoices": total_invoices or 0,
         "low_stock_count": low_stock_count or 0,
-        "total_products": total_products or 0
+        "total_products": total_products or 0,
+        "total_khatas": total_khatas or 0,
+        "net_wallet_total": net_wallet_total or 0.0,
+        "total_advance": total_advance or 0.0,
+        "total_udhaar": total_udhaar or 0.0,
     }
 
 def is_first_run():
