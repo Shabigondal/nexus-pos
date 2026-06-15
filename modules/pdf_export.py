@@ -34,6 +34,7 @@ table {{
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 10px;
+    table-layout: fixed;
 }}
 th {{
     background-color: #1e3a5f;
@@ -42,11 +43,15 @@ th {{
     font-size: 8.5pt;
     text-align: left;
     border: 1px solid #1e3a5f;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }}
 td {{
     padding: 5px 6px;
     font-size: 8.5pt;
     border: 1px solid #cccccc;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }}
 tr:nth-child(even) td {{
     background-color: #f2f5f9;
@@ -99,7 +104,7 @@ def _esc(val):
 
 def build_table_html(title, subtitle, headers, rows, col_classes=None,
                       orientation="auto", summary_rows=None, totals_row=None,
-                      footer_note=None):
+                      footer_note=None, col_widths=None):
     """
     Build a printable HTML report.
 
@@ -110,9 +115,12 @@ def build_table_html(title, subtitle, headers, rows, col_classes=None,
     summary_rows: optional list of (label, value) pairs shown above the table
     totals_row: optional list of cells for a totals row appended at the bottom (same length as headers)
     footer_note: optional small text shown below the table
+    col_widths: optional list of column widths as percentages (must sum to ~100),
+                used with table-layout: fixed so wide text columns don't get squeezed
+                into a single-letter-per-line wrap.
     """
     if orientation == "auto":
-        orientation = "landscape" if len(headers) > 6 else "portrait"
+        orientation = "landscape" if len(headers) >= 6 else "portrait"
 
     css = PAGE_CSS_TEMPLATE.format(orientation=orientation)
 
@@ -130,34 +138,39 @@ def build_table_html(title, subtitle, headers, rows, col_classes=None,
             html.append(f"<tr><td class='bold'>{_esc(label)}</td><td>{_esc(value)}</td></tr>")
         html.append("</table></div>")
 
-    html.append("<table><thead><tr>")
+    html.append("<table>")
+
+    html.append("<thead><tr>")
     for i, h in enumerate(headers):
         cls = col_classes[i] if i < len(col_classes) else ""
-        html.append(f"<th class='{cls}'>{_esc(h)}</th>")
+        style = f" style='width:{col_widths[i]}%'" if col_widths and i < len(col_widths) else ""
+        html.append(f"<th class='{cls}'{style}>{_esc(h)}</th>")
     html.append("</tr></thead><tbody>")
 
     for row in rows:
         html.append("<tr>")
         for i, cell in enumerate(row):
             cls = col_classes[i] if i < len(col_classes) else ""
+            style = f" style='width:{col_widths[i]}%'" if col_widths and i < len(col_widths) else ""
             if isinstance(cell, tuple):
                 text, extra_cls = cell
                 cls = f"{cls} {extra_cls}".strip()
             else:
                 text = cell
-            html.append(f"<td class='{cls}'>{_esc(text)}</td>")
+            html.append(f"<td class='{cls}'{style}>{_esc(text)}</td>")
         html.append("</tr>")
 
     if totals_row:
         html.append("<tr class='totals-row'>")
         for i, cell in enumerate(totals_row):
             cls = col_classes[i] if i < len(col_classes) else ""
+            style = f" style='width:{col_widths[i]}%'" if col_widths and i < len(col_widths) else ""
             if isinstance(cell, tuple):
                 text, extra_cls = cell
                 cls = f"{cls} {extra_cls}".strip()
             else:
                 text = cell
-            html.append(f"<td class='{cls}'>{_esc(text)}</td>")
+            html.append(f"<td class='{cls}'{style}>{_esc(text)}</td>")
         html.append("</tr>")
 
     html.append("</tbody></table>")

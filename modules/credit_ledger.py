@@ -1116,6 +1116,8 @@ class CreditLedgerView(ctk.CTkFrame):
                 ("Net Wallet (All Khata):", f"Rs. {net_total:,.2f}" if net_total >= 0 else f"-Rs. {abs(net_total):,.2f}"),
             ]
 
+            col_widths = [10, 30, 14, 17, 17, 12]
+
             html = build_table_html(
                 title="Khata Master Directory",
                 subtitle=f"Generated on {datetime.date.today()}",
@@ -1125,6 +1127,7 @@ class CreditLedgerView(ctk.CTkFrame):
                 orientation="auto",
                 summary_rows=summary_rows,
                 totals_row=totals_row,
+                col_widths=col_widths,
             )
 
             success, msg = export_html_to_pdf(html, save_path)
