@@ -802,22 +802,58 @@ def get_customer_passbook_count(khata_id, start_date="", end_date=""):
     conn.close()
     return total
 
-def get_passbook_purchase_items(invoice_id):
-    """Return list of (product_name, quantity, sale_price, line_total) for a PURCHASE_DEBIT invoice."""
-    if not invoice_id:
-        return []
+def get_passbook_purchase_items(invoice_id=None, fallback_customer=None, fallback_amount=None, fallback_timestamp=None):
+    """Return list of (product_name, quantity, sale_price, line_total) for a PURCHASE_DEBIT row.
+
+    Primary:  invoice_id directly linked (new transactions).
+    Fallback: match WALLET invoice by customer_name + net_amount + date proximity (old transactions).
+    """
     import sqlite3
     conn = sqlite3.connect("database/pos_system.db")
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT product_name, quantity, sale_price, line_total
-        FROM invoice_items
-        WHERE invoice_id = ?
-        ORDER BY item_id ASC
-    """, (int(invoice_id),))
-    res = cursor.fetchall()
+
+    if invoice_id:
+        cursor.execute("""
+            SELECT product_name, quantity, sale_price, line_total
+            FROM invoice_items
+            WHERE invoice_id = ?
+            ORDER BY item_id ASC
+        """, (int(invoice_id),))
+        res = cursor.fetchall()
+        conn.close()
+        return res
+
+    # Fallback: find WALLET invoice matching customer + amount + same date
+    if fallback_customer and fallback_amount is not None and fallback_timestamp:
+        try:
+            date_part = str(fallback_timestamp)[:10]  # YYYY-MM-DD
+            cursor.execute("""
+                SELECT i.invoice_id
+                FROM invoices i
+                WHERE i.customer_name = ?
+                  AND i.payment_mode = 'WALLET'
+                  AND ABS(i.net_amount - ?) < 0.01
+                  AND date(i.date) = ?
+                ORDER BY i.invoice_id DESC
+                LIMIT 1
+            """, (fallback_customer, float(fallback_amount), date_part))
+            row = cursor.fetchone()
+            if row:
+                inv_id = row[0]
+                cursor.execute("""
+                    SELECT product_name, quantity, sale_price, line_total
+                    FROM invoice_items
+                    WHERE invoice_id = ?
+                    ORDER BY item_id ASC
+                """, (inv_id,))
+                res = cursor.fetchall()
+                conn.close()
+                return res
+        except Exception:
+            pass
+
     conn.close()
-    return res
+    return []
 
 def import_ledger_customers_bulk(rows):
     """

@@ -470,8 +470,13 @@ class CreditLedgerView(ctk.CTkFrame):
 
             # Fetch purchase items if PURCHASE_DEBIT
             purchase_items = []
-            if action == "PURCHASE_DEBIT" and inv_id:
-                purchase_items = db.get_passbook_purchase_items(inv_id)
+            if action == "PURCHASE_DEBIT":
+                purchase_items = db.get_passbook_purchase_items(
+                    invoice_id=inv_id,
+                    fallback_customer=name,
+                    fallback_amount=amt,
+                    fallback_timestamp=ts
+                )
 
             has_items = bool(purchase_items)
             row_height = 38 if not has_items else (38 + len(purchase_items) * 18 + 6)
@@ -794,8 +799,13 @@ class CreditLedgerView(ctk.CTkFrame):
 
             # Build narration: append purchase items for PURCHASE_DEBIT
             narration = desc or ""
-            if action == "PURCHASE_DEBIT" and inv_id:
-                items = db.get_passbook_purchase_items(inv_id)
+            if action == "PURCHASE_DEBIT":
+                items = db.get_passbook_purchase_items(
+                    invoice_id=inv_id,
+                    fallback_customer=cust_name,
+                    fallback_amount=amt,
+                    fallback_timestamp=ts
+                )
                 if items:
                     parts = [f"{p_name} ×{p_qty} @Rs.{p_price:,.1f}" for p_name, p_qty, p_price, _ in items]
                     narration = (narration + " | " if narration else "") + " | ".join(parts)
@@ -942,8 +952,13 @@ class CreditLedgerView(ctk.CTkFrame):
 
             # Build narration cell — add items list for PURCHASE_DEBIT
             narration_parts = [desc or ""]
-            if action == "PURCHASE_DEBIT" and inv_id:
-                items = db.get_passbook_purchase_items(inv_id)
+            if action == "PURCHASE_DEBIT":
+                items = db.get_passbook_purchase_items(
+                    invoice_id=inv_id,
+                    fallback_customer=name,
+                    fallback_amount=amt,
+                    fallback_timestamp=ts
+                )
                 if items:
                     narration_parts.append("")
                     for p_name, p_qty, p_price, p_total in items:
