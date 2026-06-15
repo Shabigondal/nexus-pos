@@ -429,7 +429,7 @@ def get_filtered_invoices(search_query="", start_date="", end_date=""):
         params.append(start_date)
         params.append(end_date)
         
-    query += " ORDER BY invoice_id DESC"
+    query += " ORDER BY invoice_id ASC"
     
     cursor.execute(query, params)
     data = cursor.fetchall()
@@ -491,7 +491,7 @@ def get_invoices_with_profit(search_query="", start_date="", end_date=""):
         params.append(start_date)
         params.append(end_date)
         
-    query += " GROUP BY i.invoice_id ORDER BY i.invoice_id DESC"
+    query += " GROUP BY i.invoice_id ORDER BY i.invoice_id ASC"
     
     cursor.execute(query, params)
     data = cursor.fetchall()
@@ -587,13 +587,13 @@ def get_ledger_customers(search_query="", page=1, page_size=10):
             WHERE customer_name LIKE ? OR phone_number LIKE ?
                OR CAST(khata_id AS TEXT) LIKE ?
                OR CAST(khata_id AS TEXT) = ?
-            ORDER BY khata_id DESC
+            ORDER BY khata_id ASC
             LIMIT ? OFFSET ?
         """, (like_term, like_term, like_term, khata_term, page_size, offset))
     else:
         cursor.execute("""
             SELECT khata_id, customer_name, phone_number, current_wallet_balance 
-            FROM ledger_customers ORDER BY khata_id DESC
+            FROM ledger_customers ORDER BY khata_id ASC
             LIMIT ? OFFSET ?
         """, (page_size, offset))
     res = cursor.fetchall()
@@ -852,7 +852,7 @@ def get_customer_linked_invoices(customer_name):
         LEFT JOIN invoice_items ii ON i.invoice_id = ii.invoice_id
         WHERE i.customer_name = ? AND i.payment_mode = 'WALLET'
         GROUP BY i.invoice_id
-        ORDER BY i.invoice_id DESC
+        ORDER BY i.invoice_id ASC
     """, (customer_name,))
     res = cursor.fetchall()
     conn.close()
