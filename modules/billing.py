@@ -463,7 +463,8 @@ class BillingView(ctk.CTkFrame):
                 khata_id=self.selected_khata_id,
                 action_type="PURCHASE_DEBIT",
                 amount=net_total,
-                desc="POS System Autolink Checkout Bill Processing Node Event"
+                desc="POS System Autolink Checkout Bill Processing Node Event",
+                invoice_id=invoice_id
             )
             if not success:
                 messagebox.showerror("Wallet Error", f"Wallet deduction failed: {msg}"); return

@@ -558,10 +558,16 @@ def CRITICAL_init_ledger_tables():
             amount REAL NOT NULL,
             closing_balance REAL NOT NULL, -- Dynamic running statement trace
             description TEXT,
+            invoice_id INTEGER DEFAULT NULL, -- Linked POS invoice for PURCHASE_DEBIT rows
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(khata_id) REFERENCES ledger_customers(khata_id) ON DELETE CASCADE
         )
     """)
+    # Migration: add invoice_id column if older DB lacks it
+    cursor.execute("PRAGMA table_info(ledger_transactions)")
+    lt_cols = [r[1] for r in cursor.fetchall()]
+    if "invoice_id" not in lt_cols:
+        cursor.execute("ALTER TABLE ledger_transactions ADD COLUMN invoice_id INTEGER DEFAULT NULL")
     conn.commit()
 
     # --- Migration: older databases may have phone_number as NOT NULL UNIQUE,
@@ -705,7 +711,7 @@ def delete_ledger_customer(khata_id):
     except Exception as e:
         return False, str(e)
 
-def process_wallet_transaction(khata_id, action_type, amount, desc):
+def process_wallet_transaction(khata_id, action_type, amount, desc, invoice_id=None):
     """Core Mathematical Matrix Engine for Running Balances"""
     import sqlite3
     try:
@@ -733,9 +739,9 @@ def process_wallet_transaction(khata_id, action_type, amount, desc):
             
         # 3. Post into Timeline Log History
         cursor.execute("""
-            INSERT INTO ledger_transactions (khata_id, action_type, amount, closing_balance, description)
-            VALUES (?, ?, ?, ?, ?)
-        """, (khata_id, action_type, amount, new_balance, desc))
+            INSERT INTO ledger_transactions (khata_id, action_type, amount, closing_balance, description, invoice_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (khata_id, action_type, amount, new_balance, desc, invoice_id))
         
         # 4. Sync State back inside master account profile node
         cursor.execute("UPDATE ledger_customers SET current_wallet_balance = ? WHERE khata_id = ?", (new_balance, khata_id))
@@ -755,7 +761,7 @@ def get_customer_passbook(khata_id, start_date="", end_date="", page=1, page_siz
     cursor = conn.cursor()
 
     query = """
-        SELECT timestamp, action_type, description, amount, closing_balance 
+        SELECT timestamp, action_type, description, amount, closing_balance, invoice_id
         FROM ledger_transactions 
         WHERE khata_id = ?
     """
@@ -795,6 +801,23 @@ def get_customer_passbook_count(khata_id, start_date="", end_date=""):
     total = cursor.fetchone()[0]
     conn.close()
     return total
+
+def get_passbook_purchase_items(invoice_id):
+    """Return list of (product_name, quantity, sale_price, line_total) for a PURCHASE_DEBIT invoice."""
+    if not invoice_id:
+        return []
+    import sqlite3
+    conn = sqlite3.connect("database/pos_system.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT product_name, quantity, sale_price, line_total
+        FROM invoice_items
+        WHERE invoice_id = ?
+        ORDER BY item_id ASC
+    """, (int(invoice_id),))
+    res = cursor.fetchall()
+    conn.close()
+    return res
 
 def import_ledger_customers_bulk(rows):
     """
