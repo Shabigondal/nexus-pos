@@ -129,7 +129,7 @@ class BillingView(ctk.CTkFrame):
         h_frame = ctk.CTkFrame(cart_group, fg_color=COL_BG_CARD_ALT, corner_radius=8, height=38)
         h_frame.pack(fill="x", padx=14, pady=(0, 8))
 
-        self.cart_widths = [180, 80, 120, 100, 40]
+        self.cart_widths = [170, 80, 210, 110, 40]
         headers = ["Item", "Rate", "Quantity", "Total", ""]
 
         for idx, txt in enumerate(headers):
@@ -288,7 +288,8 @@ class BillingView(ctk.CTkFrame):
         if p_id not in self.cart_items:
             return
         try:
-            new_qty = int(float(str(value).strip()))
+            raw = str(value).strip()
+            new_qty = round(float(raw), 4) if raw else 0.0
         except ValueError:
             new_qty = self.cart_items[p_id]['qty']
 
@@ -296,7 +297,27 @@ class BillingView(ctk.CTkFrame):
             del self.cart_items[p_id]
         else:
             self.cart_items[p_id]['qty'] = new_qty
-            self.cart_items[p_id]['total'] = new_qty * self.cart_items[p_id]['rate']
+            self.cart_items[p_id]['total'] = round(new_qty * self.cart_items[p_id]['rate'], 2)
+            self.cart_items[p_id]['mode'] = self.cart_items[p_id].get('mode', 'qty')
+        self.refresh_cart_display_grid()
+
+    def set_qty_from_amount(self, p_id, amount_str):
+        """Amount mode: user types Rs. amount → auto-calculate qty."""
+        if p_id not in self.cart_items:
+            return
+        try:
+            amount = round(float(str(amount_str).strip()), 2)
+        except ValueError:
+            return
+        if amount <= 0:
+            return
+        rate = self.cart_items[p_id]['rate']
+        if rate <= 0:
+            return
+        new_qty = round(amount / rate, 4)
+        self.cart_items[p_id]['qty']    = new_qty
+        self.cart_items[p_id]['total']  = amount
+        self.cart_items[p_id]['amount'] = amount
         self.refresh_cart_display_grid()
     def refresh_cart_display_grid(self):
         for w in self.cart_scroll.winfo_children(): w.destroy()
@@ -319,27 +340,81 @@ class BillingView(ctk.CTkFrame):
                          font=ctk.CTkFont(size=12), text_color=COL_TEXT_MUTED).pack(side="left", padx=5)
 
             qty_control_box = ctk.CTkFrame(row, fg_color="transparent", width=self.cart_widths[2])
-            qty_control_box.pack(side="left", padx=5)
+            qty_control_box.pack(side="left", padx=4)
 
-            ctk.CTkButton(qty_control_box, text="−", width=26, height=26, corner_radius=6,
-                          fg_color=COL_BG_INPUT, hover_color=COL_BORDER, text_color=COL_TEXT_MAIN,
-                          font=ctk.CTkFont(size=13, weight="bold"),
-                          command=lambda k=p_id: self.modify_qty_counter(k, -1)).pack(side="left", padx=2)
-            qty_var = ctk.StringVar(value=str(item['qty']))
-            qty_entry = ctk.CTkEntry(qty_control_box, textvariable=qty_var, width=40, height=26,
-                                      justify="center", fg_color=COL_BG_INPUT, border_color=COL_BORDER,
-                                      corner_radius=6, font=ctk.CTkFont(size=12, weight="bold"),
-                                      text_color=COL_TEXT_MAIN)
-            qty_entry.pack(side="left", padx=2)
-            qty_entry.bind("<Return>", lambda e, k=p_id, v=qty_var: self.set_qty_manual(k, v.get()))
-            qty_entry.bind("<FocusOut>", lambda e, k=p_id, v=qty_var: self.set_qty_manual(k, v.get()))
-            ctk.CTkButton(qty_control_box, text="+", width=26, height=26, corner_radius=6,
-                          fg_color=COL_BG_INPUT, hover_color=COL_BORDER, text_color=COL_TEXT_MAIN,
-                          font=ctk.CTkFont(size=13, weight="bold"),
-                          command=lambda k=p_id: self.modify_qty_counter(k, 1)).pack(side="left", padx=2)
+            # ── Mode toggle pill: QTY | AMT ──────────────────────
+            item_mode = item.get('mode', 'qty')
+
+            mode_frame = ctk.CTkFrame(qty_control_box, fg_color=COL_BG_INPUT,
+                                      corner_radius=8, border_color=COL_BORDER, border_width=1)
+            mode_frame.pack(side="left", padx=(0, 4))
+
+            btn_qty_mode = ctk.CTkButton(
+                mode_frame, text="QTY", width=34, height=22, corner_radius=6,
+                fg_color=COL_ACCENT if item_mode == 'qty' else "transparent",
+                hover_color=COL_ACCENT_SOFT,
+                text_color=COL_TEXT_MAIN if item_mode == 'qty' else COL_TEXT_SOFT,
+                font=ctk.CTkFont(size=10, weight="bold"),
+                command=lambda k=p_id: self._set_cart_mode(k, 'qty')
+            )
+            btn_qty_mode.pack(side="left", padx=2, pady=2)
+
+            btn_amt_mode = ctk.CTkButton(
+                mode_frame, text="AMT", width=34, height=22, corner_radius=6,
+                fg_color="#854F0B" if item_mode == 'amt' else "transparent",
+                hover_color=COL_ACCENT_SOFT,
+                text_color="#FAC775" if item_mode == 'amt' else COL_TEXT_SOFT,
+                font=ctk.CTkFont(size=10, weight="bold"),
+                command=lambda k=p_id: self._set_cart_mode(k, 'amt')
+            )
+            btn_amt_mode.pack(side="left", padx=2, pady=2)
+
+            # ── QTY controls (shown in qty mode) ─────────────────
+            if item_mode == 'qty':
+                ctk.CTkButton(qty_control_box, text="−", width=24, height=26, corner_radius=6,
+                              fg_color=COL_BG_INPUT, hover_color=COL_BORDER, text_color=COL_TEXT_MAIN,
+                              font=ctk.CTkFont(size=13, weight="bold"),
+                              command=lambda k=p_id: self.modify_qty_counter(k, -1)).pack(side="left", padx=1)
+
+                # Format qty: show integer if whole, else show decimal
+                qty_display = str(int(item['qty'])) if item['qty'] == int(item['qty']) else f"{item['qty']:g}"
+                qty_var = ctk.StringVar(value=qty_display)
+                qty_entry = ctk.CTkEntry(qty_control_box, textvariable=qty_var, width=46, height=26,
+                                          justify="center", fg_color=COL_BG_INPUT, border_color=COL_BORDER,
+                                          corner_radius=6, font=ctk.CTkFont(size=12, weight="bold"),
+                                          text_color=COL_TEXT_MAIN)
+                qty_entry.pack(side="left", padx=1)
+                qty_entry.bind("<Return>",   lambda e, k=p_id, v=qty_var: self.set_qty_manual(k, v.get()))
+                qty_entry.bind("<FocusOut>", lambda e, k=p_id, v=qty_var: self.set_qty_manual(k, v.get()))
+
+                ctk.CTkButton(qty_control_box, text="+", width=24, height=26, corner_radius=6,
+                              fg_color=COL_BG_INPUT, hover_color=COL_BORDER, text_color=COL_TEXT_MAIN,
+                              font=ctk.CTkFont(size=13, weight="bold"),
+                              command=lambda k=p_id: self.modify_qty_counter(k, 1)).pack(side="left", padx=1)
+
+            else:
+                # ── AMT mode: show Rs. input, qty shown as read-only ──
+                saved_amt = item.get('amount', round(item['qty'] * item['rate'], 2))
+                amt_var = ctk.StringVar(value=str(int(saved_amt)) if saved_amt == int(saved_amt) else f"{saved_amt:g}")
+                amt_entry = ctk.CTkEntry(qty_control_box, textvariable=amt_var, width=70, height=26,
+                                          justify="center", fg_color=COL_BG_INPUT,
+                                          border_color="#BA7517", corner_radius=6,
+                                          font=ctk.CTkFont(size=12, weight="bold"),
+                                          text_color="#FAC775",
+                                          placeholder_text="Rs. amount")
+                amt_entry.pack(side="left", padx=2)
+                amt_entry.bind("<Return>",   lambda e, k=p_id, v=amt_var: self.set_qty_from_amount(k, v.get()))
+                amt_entry.bind("<FocusOut>", lambda e, k=p_id, v=amt_var: self.set_qty_from_amount(k, v.get()))
+
+                # Calculated qty display (read-only badge)
+                qty_display = f"{item['qty']:g}"
+                ctk.CTkLabel(qty_control_box, text=f"={qty_display}",
+                             font=ctk.CTkFont(size=11), text_color=COL_TEXT_SOFT,
+                             width=40).pack(side="left", padx=(2, 0))
 
             ctk.CTkLabel(row, text=f"Rs. {item['total']:,.2f}", width=self.cart_widths[3],
-                         font=ctk.CTkFont(size=12, weight="bold"), text_color=COL_SUCCESS).pack(side="left", padx=5)
+                         font=ctk.CTkFont(size=12, weight="bold"), text_color=COL_SUCCESS,
+                         anchor="center").pack(side="left", padx=5)
 
             ctk.CTkButton(row, text="✕", width=30, height=28, corner_radius=6,
                           fg_color=COL_DANGER_BG, hover_color="#3a1c1c", text_color=COL_DANGER,
@@ -358,6 +433,16 @@ class BillingView(ctk.CTkFrame):
         self.lbl_tax_label.configure(text=f"Tax ({tax_percent:g}%)")
         self.lbl_tax_val.configure(text=f"Rs. {tax_amount:,.2f}")
         self.lbl_total_val.configure(text=f"Rs. {self.net_total:,.2f}")
+
+    def _set_cart_mode(self, p_id, mode):
+        """Switch a cart item between 'qty' and 'amt' input mode."""
+        if p_id not in self.cart_items:
+            return
+        self.cart_items[p_id]['mode'] = mode
+        # When switching to qty mode, clear stored amount so it recalculates cleanly
+        if mode == 'qty' and 'amount' in self.cart_items[p_id]:
+            del self.cart_items[p_id]['amount']
+        self.refresh_cart_display_grid()
 
     def drop_cart_item(self, target_key):
         if target_key in self.cart_items:
