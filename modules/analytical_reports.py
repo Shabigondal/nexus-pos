@@ -261,6 +261,7 @@ class AnalyticalReportsView(ctk.CTkFrame):
         self.card_date      = self._make_detail_node("Date & Time", "—")
         self.card_mode      = self._make_detail_node("Payment Mode", "—")
         self.card_subtotal  = self._make_detail_node("Subtotal", "Rs. 0.00")
+        self.card_discount  = self._make_detail_node("Discount Applied", "Rs. 0.00", color="#f0ad4e")
         self.card_tax       = self._make_detail_node("Tax Applied", "0%")
         self.card_net       = self._make_detail_node("Net Payable", "Rs. 0.00", highlight=True)
         self.card_profit    = self._make_detail_node("Profit on Invoice", "Rs. —", highlight=False, color="#a855f7")
@@ -435,7 +436,7 @@ class AnalyticalReportsView(ctk.CTkFrame):
             return
 
         for idx, inv in enumerate(page_chunk):
-            inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit = inv
+            inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit, discount_amount, discount_note = inv
 
             row_bg = COL_BG_CARD_ALT if idx % 2 == 0 else "transparent"
             row = ctk.CTkFrame(self.table_container, fg_color=row_bg, corner_radius=6, height=40)
@@ -498,7 +499,7 @@ class AnalyticalReportsView(ctk.CTkFrame):
     # ─────────────────────────────────────────────────────────────────
     def focus_invoice_target(self, payload):
         self.active_selection = payload
-        inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit = payload
+        inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit, discount_amount, discount_note = payload
 
         self.card_inv_id.configure(text=f"#INV-{inv_id:04d}")
         self.card_cust.configure(text=cust_name if cust_name else "Walk-in Customer")
@@ -506,6 +507,11 @@ class AnalyticalReportsView(ctk.CTkFrame):
         mode_text = "💵 Cash" if pay_mode == "CASH" else "💳 Khata / Wallet"
         self.card_mode.configure(text=mode_text)
         self.card_subtotal.configure(text=f"Rs. {subtotal:,.2f}")
+        if discount_amount and float(discount_amount) > 0:
+            note = discount_note or "Discount"
+            self.card_discount.configure(text=f"- Rs. {float(discount_amount):,.2f}  ({note})")
+        else:
+            self.card_discount.configure(text="Rs. 0.00")
         self.card_tax.configure(text=f"{tax_pct:g}%  →  Rs. {(subtotal * float(tax_pct) / 100):,.2f}")
         self.card_net.configure(text=f"Rs. {net_amount:,.2f}")
 
@@ -529,16 +535,17 @@ class AnalyticalReportsView(ctk.CTkFrame):
     # ─────────────────────────────────────────────────────────────────
     def execute_thermal_print(self):
         if not self.active_selection: return
-        inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit = self.active_selection
+        inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit, discount_amount, discount_note = self.active_selection
         items = db.get_invoice_items_for_print(inv_id)
         if not items:
             items = [[0, "Transaction Settlement Record", 1, subtotal, subtotal, 1]]
         InvoicePrintWindow(self, inv_id, cust_name or "Walk-in Customer",
-                           timestamp, subtotal, tax_pct, net_amount, items)
+                           timestamp, subtotal, tax_pct, net_amount, items,
+                           discount_amount=discount_amount, discount_note=discount_note)
 
     def export_pdf_document(self):
         if not self.active_selection: return
-        inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit = self.active_selection
+        inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit, discount_amount, discount_note = self.active_selection
         items = db.get_invoice_items_for_print(inv_id)
         if not items:
             items = [[0, "Transaction Settlement Record", 1, subtotal, subtotal, 1]]
@@ -556,7 +563,8 @@ class AnalyticalReportsView(ctk.CTkFrame):
 
         success, msg = export_invoice_pdf(
             save_path, inv_id, cust_name or "Walk-in Customer",
-            timestamp, subtotal, tax_pct, net_amount, items
+            timestamp, subtotal, tax_pct, net_amount, items,
+            discount_amount=discount_amount, discount_note=discount_note
         )
         if success:
             messagebox.showinfo("PDF Export", msg)
@@ -565,14 +573,16 @@ class AnalyticalReportsView(ctk.CTkFrame):
 
     def copy_invoice_summary(self):
         if not self.active_selection: return
-        inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit = self.active_selection
+        inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit, discount_amount, discount_note = self.active_selection
         profit_str = f"Rs. {profit:,.2f}" if profit is not None else "—"
+        discount_line = f"Discount: -Rs. {float(discount_amount):,.2f} ({discount_note})\n" if discount_amount and float(discount_amount) > 0 else ""
         summary = (
             f"Invoice: #INV-{inv_id:04d}\n"
             f"Customer: {cust_name or 'Walk-in Customer'}\n"
             f"Date: {timestamp}\n"
             f"Mode: {pay_mode}\n"
             f"Subtotal: Rs. {subtotal:,.2f}\n"
+            f"{discount_line}"
             f"Tax: {tax_pct}%\n"
             f"Net Payable: Rs. {net_amount:,.2f}\n"
             f"Profit: {profit_str}"
@@ -650,7 +660,7 @@ class AnalyticalReportsView(ctk.CTkFrame):
         )
 
         # Title row
-        ws1.merge_cells("A1:I1")
+        ws1.merge_cells("A1:J1")
         title_cell = ws1["A1"]
         title_cell.value = "📊 Invoice & Profit Report"
         title_cell.font = title_font
@@ -659,7 +669,7 @@ class AnalyticalReportsView(ctk.CTkFrame):
         ws1.row_dimensions[1].height = 30
 
         # Generated info
-        ws1.merge_cells("A2:I2")
+        ws1.merge_cells("A2:J2")
         info_cell = ws1["A2"]
         info_cell.value = f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}   |   Total Invoices: {len(self.cached_invoices)}"
         info_cell.font = Font(color="94a3b8", italic=True, name="Arial", size=10)
@@ -669,7 +679,7 @@ class AnalyticalReportsView(ctk.CTkFrame):
 
         # Header row
         headers = ["Invoice No", "Customer Name", "Date & Time", "Payment Mode",
-                   "Subtotal (Rs.)", "Tax %", "Net Amount (Rs.)", "Profit (Rs.)", "Margin %"]
+                   "Subtotal (Rs.)", "Tax %", "Net Amount (Rs.)", "Profit (Rs.)", "Margin %", "Discount (Rs.)"]
         ws1.row_dimensions[3].height = 22
         for col_idx, hdr in enumerate(headers, 1):
             cell = ws1.cell(row=3, column=col_idx, value=hdr)
@@ -684,7 +694,7 @@ class AnalyticalReportsView(ctk.CTkFrame):
         profit_count = 0
 
         for row_idx, inv in enumerate(self.cached_invoices, 4):
-            inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit = inv
+            inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit, discount_amount, discount_note = inv
             total_revenue += net_amount
 
             margin = None
@@ -704,14 +714,15 @@ class AnalyticalReportsView(ctk.CTkFrame):
                 f"{tax_pct}%",
                 round(net_amount, 2),
                 round(profit, 2) if profit is not None else "—",
-                f"{margin:.1f}%" if margin is not None else "—"
+                f"{margin:.1f}%" if margin is not None else "—",
+                round(float(discount_amount), 2) if discount_amount else 0
             ]
             for col_idx, val in enumerate(row_data, 1):
                 cell = ws1.cell(row=row_idx, column=col_idx, value=val)
                 cell.fill = row_fill
                 cell.font = Font(name="Arial", size=10, color="f1f5f9")
                 cell.border = thin_border
-                if col_idx in (5, 7):
+                if col_idx in (5, 7, 10):
                     cell.number_format = '#,##0.00'
                     cell.alignment = Alignment(horizontal="right")
                 elif col_idx == 8 and profit is not None:
@@ -750,7 +761,7 @@ class AnalyticalReportsView(ctk.CTkFrame):
             ws1.cell(row=footer_row, column=9, value=f"{overall_margin:.1f}%").font = Font(bold=True, color="a855f7", name="Arial")
 
         # Column widths
-        col_widths = [14, 25, 20, 14, 16, 8, 18, 16, 12]
+        col_widths = [14, 25, 20, 14, 16, 8, 18, 16, 12, 16]
         for i, w in enumerate(col_widths, 1):
             ws1.column_dimensions[get_column_letter(i)].width = w
 
@@ -776,7 +787,7 @@ class AnalyticalReportsView(ctk.CTkFrame):
 
         current_row = 3
         for inv in self.cached_invoices:
-            inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit = inv
+            inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit, discount_amount, discount_note = inv
             items = db.get_invoice_profit(inv_id)
             if not items:
                 # Old invoice — no items saved
@@ -840,10 +851,10 @@ class AnalyticalReportsView(ctk.CTkFrame):
             writer = csv.writer(f)
             writer.writerow([
                 "Invoice No", "Customer Name", "Subtotal (Rs.)",
-                "Tax %", "Net Amount (Rs.)", "Date & Time", "Payment Mode", "Profit (Rs.)"
+                "Tax %", "Net Amount (Rs.)", "Date & Time", "Payment Mode", "Profit (Rs.)", "Discount (Rs.)"
             ])
             for inv in self.cached_invoices:
-                inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit = inv
+                inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit, discount_amount, discount_note = inv
                 writer.writerow([
                     f"INV-{inv_id:04d}",
                     cust_name or "Walk-in Customer",
@@ -852,15 +863,16 @@ class AnalyticalReportsView(ctk.CTkFrame):
                     f"{net_amount:.2f}",
                     timestamp,
                     pay_mode,
-                    f"{profit:.2f}" if profit is not None else "—"
+                    f"{profit:.2f}" if profit is not None else "—",
+                    f"{float(discount_amount):.2f}" if discount_amount else "0.00"
                 ])
             writer.writerow([])
             total_revenue = sum(inv[4] for inv in self.cached_invoices)
             profits = [inv[7] for inv in self.cached_invoices if inv[7] is not None]
-            writer.writerow(["", "TOTAL INVOICES", len(self.cached_invoices), "", "", "", "", ""])
-            writer.writerow(["", "TOTAL REVENUE", "", "", f"{total_revenue:.2f}", "", "", ""])
+            writer.writerow(["", "TOTAL INVOICES", len(self.cached_invoices), "", "", "", "", "", ""])
+            writer.writerow(["", "TOTAL REVENUE", "", "", f"{total_revenue:.2f}", "", "", "", ""])
             if profits:
-                writer.writerow(["", "TOTAL PROFIT", "", "", "", "", "", f"{sum(profits):.2f}"])
+                writer.writerow(["", "TOTAL PROFIT", "", "", "", "", "", f"{sum(profits):.2f}", ""])
 
         messagebox.showinfo(
             "Export Successful ✅",

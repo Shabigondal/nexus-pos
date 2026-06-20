@@ -59,7 +59,18 @@ def init_db():
                         discount REAL,
                         net_amount REAL,
                         date TEXT,
-                        payment_mode TEXT)''')
+                        payment_mode TEXT,
+                        discount_amount REAL DEFAULT 0,
+                        discount_note TEXT DEFAULT '')''')
+
+    # 3b. Migration: add discount_amount / discount_note to older databases
+    #     that were created before the discount feature existed.
+    cursor.execute("PRAGMA table_info(invoices)")
+    existing_cols = [c[1] for c in cursor.fetchall()]
+    if "discount_amount" not in existing_cols:
+        cursor.execute("ALTER TABLE invoices ADD COLUMN discount_amount REAL DEFAULT 0")
+    if "discount_note" not in existing_cols:
+        cursor.execute("ALTER TABLE invoices ADD COLUMN discount_note TEXT DEFAULT ''")
 
     # 4. Invoice Items Table (Profit Tracking)
     cursor.execute('''CREATE TABLE IF NOT EXISTS invoice_items (
@@ -393,7 +404,8 @@ def delete_product(p_id):
 
 # --- BILLING ENGINE & INVOICE SYSTEMS ---
 
-def create_invoice(customer_name, subtotal, tax_percent, total, payment_mode, cart_items):
+def create_invoice(customer_name, subtotal, tax_percent, total, payment_mode, cart_items,
+                    discount_amount=0.0, discount_note=""):
     """Generates a unique invoice sequence and deducts stock inside a single secure database transaction."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -404,8 +416,10 @@ def create_invoice(customer_name, subtotal, tax_percent, total, payment_mode, ca
         c_name = customer_name.strip() if customer_name.strip() else "Walk-in Customer"
         
         # 1. Insert Master Invoice Record
-        cursor.execute("""INSERT INTO invoices (customer_name, total_amount, discount, net_amount, date, payment_mode) 
-                          VALUES (?, ?, ?, ?, ?, ?)""", (c_name, float(subtotal), float(tax_percent), float(total), current_date, payment_mode))
+        cursor.execute("""INSERT INTO invoices (customer_name, total_amount, discount, net_amount, date, payment_mode, discount_amount, discount_note) 
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                       (c_name, float(subtotal), float(tax_percent), float(total), current_date, payment_mode,
+                        float(discount_amount or 0), discount_note or ""))
         
         invoice_id = cursor.lastrowid # Unique Invoice Number
         
@@ -504,7 +518,8 @@ def get_invoices_with_profit(search_query="", start_date="", end_date=""):
     query = """
         SELECT i.invoice_id, i.customer_name, i.total_amount, i.discount, i.net_amount,
                i.date, i.payment_mode,
-               COALESCE(SUM((ii.sale_price - ii.cost_price) * ii.quantity), NULL) AS profit
+               COALESCE(SUM((ii.sale_price - ii.cost_price) * ii.quantity), NULL) AS profit,
+               i.discount_amount, i.discount_note
         FROM invoices i
         LEFT JOIN invoice_items ii ON i.invoice_id = ii.invoice_id
         WHERE 1=1
@@ -526,7 +541,7 @@ def get_invoices_with_profit(search_query="", start_date="", end_date=""):
     cursor.execute(query, params)
     data = cursor.fetchall()
     conn.close()
-    return data  # 8 columns: id, name, subtotal, tax%, net, date, mode, profit(or None)
+    return data  # 10 columns: id, name, subtotal, tax%, net, date, mode, profit(or None), discount_amount, discount_note
 
 # =================================================================
 # 💎 ADVANCED WALLET & RUNNING LEDGER DATABASE ENGINE

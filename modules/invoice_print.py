@@ -6,7 +6,8 @@ import base64
 from database.db_manager import get_setting
 
 
-def build_invoice_html(invoice_no, customer_name, date, subtotal, tax, total, cart_items):
+def build_invoice_html(invoice_no, customer_name, date, subtotal, tax, total, cart_items,
+                        discount_amount=0.0, discount_note=""):
     """
     Builds the invoice HTML receipt. Shared by the print-preview window
     and the PDF export function so both stay in sync.
@@ -14,6 +15,9 @@ def build_invoice_html(invoice_no, customer_name, date, subtotal, tax, total, ca
     shop_name = get_setting("shop_name", "Afzal Petrol Agency")
     logo_path = get_setting("logo_path", "")
     footer_note = get_setting("footer_note", "System generated invoice. Thank you for your business!")
+
+    discount_amount = float(discount_amount or 0)
+    taxable_amount = max(subtotal - discount_amount, 0)
 
     header_html = _build_header_html(shop_name, logo_path)
 
@@ -29,6 +33,16 @@ def build_invoice_html(invoice_no, customer_name, date, subtotal, tax, total, ca
             <td style='padding: 6px; border-bottom: 1px solid #eeeeee; text-align: right;'>Rs.{price:.2f}</td>
             <td style='padding: 6px; border-bottom: 1px solid #eeeeee; text-align: right;'>Rs.{total_p:.2f}</td>
         </tr>
+        """
+
+    discount_row_html = ""
+    if discount_amount > 0:
+        note_suffix = f" ({discount_note})" if discount_note else ""
+        discount_row_html = f"""
+            <tr>
+                <td style='padding: 5px; color: #c0392b;'>Discount{note_suffix}:</td>
+                <td style='padding: 5px; text-align: right; color: #c0392b;'>-Rs.{discount_amount:.2f}</td>
+            </tr>
         """
 
     html_template = f"""
@@ -81,9 +95,10 @@ def build_invoice_html(invoice_no, customer_name, date, subtotal, tax, total, ca
                 <td style='padding: 5px;'>Subtotal:</td>
                 <td style='padding: 5px; text-align: right;'>Rs.{subtotal:.2f}</td>
             </tr>
+            {discount_row_html}
             <tr>
                 <td style='padding: 5px;'>Tax Surcharge ({tax}%):</td>
-                <td style='padding: 5px; text-align: right;'>Rs.{(subtotal * tax / 100):.2f}</td>
+                <td style='padding: 5px; text-align: right;'>Rs.{(taxable_amount * tax / 100):.2f}</td>
             </tr>
             <tr class='grand-total'>
                 <td style='padding: 8px;'>Net Amount:</td>
@@ -113,7 +128,8 @@ def _build_header_html(shop_name, logo_path):
     return shop_name.upper()
 
 
-def export_invoice_pdf(save_path, invoice_no, customer_name, date, subtotal, tax, total, cart_items):
+def export_invoice_pdf(save_path, invoice_no, customer_name, date, subtotal, tax, total, cart_items,
+                        discount_amount=0.0, discount_note=""):
     """
     Renders the invoice HTML and saves it as a PDF file at save_path
     using xhtml2pdf. Returns (success: bool, message: str).
@@ -127,7 +143,8 @@ def export_invoice_pdf(save_path, invoice_no, customer_name, date, subtotal, tax
             "pip install xhtml2pdf"
         )
 
-    html_content = build_invoice_html(invoice_no, customer_name, date, subtotal, tax, total, cart_items)
+    html_content = build_invoice_html(invoice_no, customer_name, date, subtotal, tax, total, cart_items,
+                                       discount_amount=discount_amount, discount_note=discount_note)
 
     try:
         with open(save_path, "wb") as f:
@@ -140,7 +157,8 @@ def export_invoice_pdf(save_path, invoice_no, customer_name, date, subtotal, tax
 
 
 class InvoicePrintWindow(ctk.CTkToplevel):
-    def __init__(self, parent, invoice_no, customer_name, date, subtotal, tax, total, cart_items):
+    def __init__(self, parent, invoice_no, customer_name, date, subtotal, tax, total, cart_items,
+                 discount_amount=0.0, discount_note=""):
         super().__init__(parent)
 
         self.title(f"Nexus Transaction Print Engine - #INV-{invoice_no}")
@@ -152,7 +170,8 @@ class InvoicePrintWindow(ctk.CTkToplevel):
         # Primary container setup
         self.configure(fg_color="#121214")
 
-        html_template = build_invoice_html(invoice_no, customer_name, date, subtotal, tax, total, cart_items)
+        html_template = build_invoice_html(invoice_no, customer_name, date, subtotal, tax, total, cart_items,
+                                            discount_amount=discount_amount, discount_note=discount_note)
 
         # Embedded HTML Frame Renderer Component
         self.frame = tkinterweb.HtmlFrame(self)

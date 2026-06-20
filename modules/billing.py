@@ -30,6 +30,8 @@ class BillingView(ctk.CTkFrame):
         self.linked_customer_name = None  # Name of linked khata customer
         self.subtotal = 0.0
         self.net_total = 0.0
+        self.discount_mode = "percent"  # 'percent' or 'flat'
+        self.discount_amount = 0.0      # computed Rs. value of discount, refreshed live
 
         # Base layout parent allocations splitting
         self.grid_columnconfigure(0, weight=5)
@@ -151,6 +153,42 @@ class BillingView(ctk.CTkFrame):
         ctk.CTkLabel(right_pane, text="💵 Checkout Summary", font=ctk.CTkFont(size=16, weight="bold"),
                      text_color=COL_TEXT_MAIN).pack(anchor="w", padx=20, pady=(20, 16))
 
+        # Discount row
+        discount_row = ctk.CTkFrame(right_pane, fg_color=COL_BG_INPUT, corner_radius=8, border_color=COL_BORDER, border_width=1)
+        discount_row.pack(fill="x", padx=20, pady=(0, 14))
+
+        ctk.CTkLabel(discount_row, text="Discount", font=ctk.CTkFont(size=12), text_color=COL_TEXT_MUTED).pack(side="left", padx=(14, 0), pady=10)
+        discount_input_holder = ctk.CTkFrame(discount_row, fg_color="transparent")
+        discount_input_holder.pack(side="right", padx=(0, 10), pady=6)
+
+        # Mode toggle pill: % | Rs.
+        self.discount_mode_frame = ctk.CTkFrame(discount_input_holder, fg_color=COL_BG_CARD,
+                                                  corner_radius=8, border_color=COL_BORDER, border_width=1)
+        self.discount_mode_frame.pack(side="left", padx=(0, 6))
+
+        self.btn_discount_pct = ctk.CTkButton(
+            self.discount_mode_frame, text="%", width=30, height=24, corner_radius=6,
+            fg_color=COL_ACCENT, hover_color=COL_ACCENT_SOFT, text_color=COL_TEXT_MAIN,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=lambda: self._set_discount_mode("percent")
+        )
+        self.btn_discount_pct.pack(side="left", padx=2, pady=2)
+
+        self.btn_discount_flat = ctk.CTkButton(
+            self.discount_mode_frame, text="Rs.", width=34, height=24, corner_radius=6,
+            fg_color="transparent", hover_color=COL_ACCENT_SOFT, text_color=COL_TEXT_SOFT,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=lambda: self._set_discount_mode("flat")
+        )
+        self.btn_discount_flat.pack(side="left", padx=2, pady=2)
+
+        self.inp_discount_value = ctk.CTkEntry(discount_input_holder, width=60, height=32, fg_color=COL_BG_CARD,
+                                                border_color=COL_BORDER, corner_radius=6, justify="center",
+                                                font=ctk.CTkFont(size=13, weight="bold"))
+        self.inp_discount_value.insert(0, "0")
+        self.inp_discount_value.pack(side="left")
+        self.inp_discount_value.bind("<KeyRelease>", lambda e: self.refresh_cart_display_grid())
+
         # Tax row
         tax_row = ctk.CTkFrame(right_pane, fg_color=COL_BG_INPUT, corner_radius=8, border_color=COL_BORDER, border_width=1)
         tax_row.pack(fill="x", padx=20, pady=(0, 14))
@@ -176,6 +214,14 @@ class BillingView(ctk.CTkFrame):
         ctk.CTkLabel(row_subtotal, text="Subtotal", font=ctk.CTkFont(size=13), text_color=COL_TEXT_MUTED).pack(side="left")
         self.lbl_subtotal_val = ctk.CTkLabel(row_subtotal, text="Rs. 0.00", font=ctk.CTkFont(size=13, weight="bold"), text_color=COL_TEXT_MAIN)
         self.lbl_subtotal_val.pack(side="right")
+
+        self.row_discount = ctk.CTkFrame(totals_box, fg_color="transparent")
+        self.row_discount.pack(fill="x", padx=16, pady=(0, 6))
+        self.lbl_discount_label = ctk.CTkLabel(self.row_discount, text="Discount", font=ctk.CTkFont(size=13), text_color="#f0ad4e")
+        self.lbl_discount_label.pack(side="left")
+        self.lbl_discount_val = ctk.CTkLabel(self.row_discount, text="- Rs. 0.00", font=ctk.CTkFont(size=13, weight="bold"), text_color="#f0ad4e")
+        self.lbl_discount_val.pack(side="right")
+        self.row_discount.pack_forget()  # hidden until a discount is actually applied
 
         row_tax = ctk.CTkFrame(totals_box, fg_color="transparent")
         row_tax.pack(fill="x", padx=16, pady=(0, 12))
@@ -426,13 +472,57 @@ class BillingView(ctk.CTkFrame):
         except ValueError:
             tax_percent = 0.0
 
-        tax_amount = self.subtotal * tax_percent / 100
-        self.net_total = self.subtotal + tax_amount
+        discount_amount, discount_note = self._compute_discount()
+        self.discount_amount = discount_amount
+        taxable_amount = max(self.subtotal - discount_amount, 0)
+
+        tax_amount = taxable_amount * tax_percent / 100
+        self.net_total = taxable_amount + tax_amount
 
         self.lbl_subtotal_val.configure(text=f"Rs. {self.subtotal:,.2f}")
+
+        if discount_amount > 0:
+            self.lbl_discount_label.configure(text=f"Discount ({discount_note})")
+            self.lbl_discount_val.configure(text=f"- Rs. {discount_amount:,.2f}")
+            self.row_discount.pack(fill="x", padx=16, pady=(0, 6), after=self.lbl_subtotal_val.master)
+        else:
+            self.row_discount.pack_forget()
+
         self.lbl_tax_label.configure(text=f"Tax ({tax_percent:g}%)")
         self.lbl_tax_val.configure(text=f"Rs. {tax_amount:,.2f}")
         self.lbl_total_val.configure(text=f"Rs. {self.net_total:,.2f}")
+
+    def _compute_discount(self):
+        """Returns (discount_amount_in_Rs, display_note) based on current mode + entry value.
+        Discount is capped so it can never exceed the subtotal (no negative totals)."""
+        try:
+            raw_val = float(self.inp_discount_value.get().strip() or 0)
+        except ValueError:
+            raw_val = 0.0
+        if raw_val <= 0:
+            return 0.0, ""
+
+        if self.discount_mode == "percent":
+            raw_val = min(raw_val, 100)
+            amount = round(self.subtotal * raw_val / 100, 2)
+            note = f"{raw_val:g}%"
+        else:
+            amount = round(raw_val, 2)
+            note = "Flat"
+
+        amount = min(amount, self.subtotal) if self.subtotal > 0 else 0.0
+        return amount, note
+
+    def _set_discount_mode(self, mode):
+        """Switch the invoice-level discount between 'percent' and 'flat' Rs. input."""
+        self.discount_mode = mode
+        if mode == "percent":
+            self.btn_discount_pct.configure(fg_color=COL_ACCENT, text_color=COL_TEXT_MAIN)
+            self.btn_discount_flat.configure(fg_color="transparent", text_color=COL_TEXT_SOFT)
+        else:
+            self.btn_discount_flat.configure(fg_color=COL_ACCENT, text_color=COL_TEXT_MAIN)
+            self.btn_discount_pct.configure(fg_color="transparent", text_color=COL_TEXT_SOFT)
+        self.refresh_cart_display_grid()
 
     def _set_cart_mode(self, p_id, mode):
         """Switch a cart item between 'qty' and 'amt' input mode."""
@@ -522,8 +612,10 @@ class BillingView(ctk.CTkFrame):
         except ValueError:
             tax_percent = 0.0
 
-        tax_amount = self.subtotal * tax_percent / 100
-        net_total = self.subtotal + tax_amount
+        discount_amount, discount_note = self._compute_discount()
+        taxable_amount = max(self.subtotal - discount_amount, 0)
+        tax_amount = taxable_amount * tax_percent / 100
+        net_total = taxable_amount + tax_amount
 
         # Build cart_items in the 6-tuple format expected by create_invoice & print window:
         # [p_id, name, qty, price, total, max_stock]
@@ -538,7 +630,8 @@ class BillingView(ctk.CTkFrame):
             customer_name = getattr(self, "linked_customer_name", None) or "Khata Customer"
 
             # 1. Save the invoice + deduct stock
-            ok, result, inv_date = db.create_invoice(customer_name, self.subtotal, tax_percent, net_total, payment_mode, cart_payload)
+            ok, result, inv_date = db.create_invoice(customer_name, self.subtotal, tax_percent, net_total, payment_mode, cart_payload,
+                                                       discount_amount=discount_amount, discount_note=discount_note)
             if not ok:
                 messagebox.showerror("Database Error", f"Invoice save failed: {result}"); return
             invoice_id = result
@@ -561,7 +654,8 @@ class BillingView(ctk.CTkFrame):
             customer_name = typed_name if typed_name else "Walk-in Customer"
 
             try:
-                ok, result, inv_date = db.create_invoice(customer_name, self.subtotal, tax_percent, net_total, payment_mode, cart_payload)
+                ok, result, inv_date = db.create_invoice(customer_name, self.subtotal, tax_percent, net_total, payment_mode, cart_payload,
+                                                           discount_amount=discount_amount, discount_note=discount_note)
                 if not ok:
                     messagebox.showerror("Database Error", f"Failed to save invoice: {result}")
                     return
@@ -573,7 +667,8 @@ class BillingView(ctk.CTkFrame):
         # 🖨️ Open print preview window with the saved invoice details
         try:
             from modules.invoice_print import InvoicePrintWindow
-            InvoicePrintWindow(self.winfo_toplevel(), invoice_id, customer_name, inv_date, self.subtotal, tax_percent, net_total, cart_payload)
+            InvoicePrintWindow(self.winfo_toplevel(), invoice_id, customer_name, inv_date, self.subtotal, tax_percent, net_total, cart_payload,
+                                discount_amount=discount_amount, discount_note=discount_note)
         except Exception as e:
             messagebox.showwarning("Print Preview Unavailable", f"Invoice saved successfully, but print preview failed to open: {e}")
 
@@ -583,5 +678,8 @@ class BillingView(ctk.CTkFrame):
         self.cart_items.clear()
         self.unlink_customer_profile()
         self.inp_prod_search.delete(0, "end")
+        self.inp_discount_value.delete(0, "end")
+        self.inp_discount_value.insert(0, "0")
+        self._set_discount_mode("percent")
         self.render_product_search_results()
         self.refresh_cart_display_grid()
