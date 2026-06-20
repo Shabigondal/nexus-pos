@@ -475,7 +475,7 @@ class CreditLedgerView(ctk.CTkFrame):
             ctk.CTkLabel(row, text=ts, width=widths[0], text_color="gray", font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
             
             # Action Colors Parsing Matrix Tags
-            act_colors = {'ADVANCE_DEPOSIT': '#4aff4a', 'CASH_WITHDRAWAL': '#ff9f43', 'PURCHASE_DEBIT': '#8ed1fc', 'OVERDRAFT_CREDIT': '#ff4a4a'}
+            act_colors = {'ADVANCE_DEPOSIT': '#4aff4a', 'CASH_WITHDRAWAL': '#ff9f43', 'PURCHASE_DEBIT': '#8ed1fc', 'UDHAAR': '#ff4a4a'}
             ctk.CTkLabel(row, text=action, width=widths[1], text_color=act_colors.get(action, '#ffffff'), font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=4)
             
             ctk.CTkLabel(row, text=desc[:28], width=widths[2], anchor="w", font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
@@ -779,7 +779,7 @@ class CreditLedgerView(ctk.CTkFrame):
             "ADVANCE_DEPOSIT":  "4aff4a",
             "CASH_WITHDRAWAL":  "ff9f43",
             "PURCHASE_DEBIT":   "8ed1fc",
-            "OVERDRAFT_CREDIT": "ff4a4a",
+            "UDHAAR": "ff4a4a",
         }
         for ri, (ts, action, desc, amt, closing, items_summary) in enumerate(logs, 4):
             fill = s["dark_fill"] if ri % 2 == 0 else s["darker_fill"]
@@ -951,7 +951,7 @@ class CreditLedgerView(ctk.CTkFrame):
                 "ADVANCE_DEPOSIT":  "green",
                 "CASH_WITHDRAWAL":  "orange",
                 "PURCHASE_DEBIT":   "blue",
-                "OVERDRAFT_CREDIT": "red",
+                "UDHAAR": "red",
             }
 
             pb_headers = ["#", "Timestamp", "Action Type", "Narration / Description", "Items Detail", "Amount (Rs.)", "Closing Balance (Rs.)"]
@@ -976,7 +976,7 @@ class CreditLedgerView(ctk.CTkFrame):
             # ── Summary block ────────────────────────────────────
             total_deposits    = sum(row[3] for row in logs if row[1] == "ADVANCE_DEPOSIT")
             total_withdrawals = sum(row[3] for row in logs if row[1] == "CASH_WITHDRAWAL")
-            total_purchases   = sum(row[3] for row in logs if row[1] in ("PURCHASE_DEBIT", "OVERDRAFT_CREDIT"))
+            total_purchases   = sum(row[3] for row in logs if row[1] in ("PURCHASE_DEBIT", "UDHAAR"))
 
             summary_rows = [
                 ("Customer Name:",   name),
