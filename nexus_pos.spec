@@ -19,6 +19,7 @@ hidden_imports += collect_submodules('tkcalendar')
 hidden_imports += collect_submodules('xhtml2pdf')
 hidden_imports += collect_submodules('reportlab')
 hidden_imports += collect_submodules('tkinterweb')
+hidden_imports += collect_submodules('rsa')
 
 # Local project packages - PyInstaller's static analysis can miss these
 # namespace-style imports (database.db_manager, modules.*), so list them

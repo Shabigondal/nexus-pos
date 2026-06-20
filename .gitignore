@@ -27,3 +27,7 @@ Output/
 # OS junk
 .DS_Store
 Thumbs.db
+
+# Development keys and certificates (Highly Sensitive)
+dev_tools/*.pem
+*.pem

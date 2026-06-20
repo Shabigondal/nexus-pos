@@ -7,3 +7,4 @@ xhtml2pdf
 pywin32; platform_system == "Windows"
 google-auth-oauthlib
 google-api-python-client
+rsa

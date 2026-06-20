@@ -4,6 +4,8 @@ import time
 import tkinter.messagebox as messagebox
 import webbrowser
 from modules.auth import AuthWindow
+from modules.activation_window import ActivationWindow
+from modules.license_manager import is_activated
 from modules.inventory import InventoryView
 from modules.billing import BillingView
 from modules.analytical_reports import AnalyticalReportsView
@@ -36,6 +38,13 @@ class EnterpriseBillingApp(ctk.CTk):
 
         # Security Execution Context Initialization
         self.withdraw()
+        if is_activated():
+            self.security_gate = AuthWindow(self, on_success=self.initialize_system)
+        else:
+            self.activation_gate = ActivationWindow(self, on_success=self.launch_login_gate)
+
+    def launch_login_gate(self):
+        """Called once activation succeeds - proceeds to the normal login screen."""
         self.security_gate = AuthWindow(self, on_success=self.initialize_system)
 
     def initialize_system(self, username=None):

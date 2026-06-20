@@ -13,6 +13,7 @@ Backup & Restore Manager
 
 import os
 import io
+import sys
 import shutil
 from datetime import datetime
 import tkinter.filedialog as filedialog
@@ -32,12 +33,45 @@ try:
 except ImportError:
     GOOGLE_LIBS_AVAILABLE = False
 
+
+def _app_base_dir():
+    """
+    Folder where the app itself lives, i.e. where the bundled
+    'drive_credentials.json' (the developer's OAuth client file) sits.
+    - Frozen .exe (PyInstaller): folder containing NexusPOS.exe
+    - Running from source: project root
+    """
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _user_data_dir():
+    """
+    Writable per-user folder for the authorized session token.
+    The app is usually installed in Program Files, where a normal
+    (non-admin) Windows user cannot write files - so the session
+    token must NOT live next to the .exe. %LOCALAPPDATA% is always
+    writable by the logged-in user and survives app updates/reinstalls.
+    """
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    path = os.path.join(base, "NexusPOS")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 # --------------------------------------------------------------------------
 # Google Drive configuration
 # --------------------------------------------------------------------------
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
-CREDENTIALS_FILE = "drive_credentials.json"   # OAuth client secret, provided by the app owner
-TOKEN_FILE = "drive_token.pickle"             # stores the user's authorized session
+# OAuth client file - created ONCE by the app developer in Google Cloud
+# Console and bundled inside the build (see nexus_pos.spec). The end client
+# never sees, downloads, or touches this file.
+CREDENTIALS_FILE = os.path.join(_app_base_dir(), "drive_credentials.json")
+# Stores the CLIENT's own authorized session, created automatically the
+# first time they click "Upload to Google Drive" and approve the consent
+# screen in their browser. Lives in a writable per-user folder.
+TOKEN_FILE = os.path.join(_user_data_dir(), "drive_token.pickle")
 DRIVE_BACKUP_FOLDER_NAME = "Nexus POS Backups"
 LIVE_SYNC_FILE_NAME = "nexus_live_database.db"  # single file that auto-sync keeps updating
 
@@ -161,10 +195,11 @@ def _get_drive_service():
 
     if not os.path.exists(CREDENTIALS_FILE):
         raise RuntimeError(
-            f"'{CREDENTIALS_FILE}' not found.\n\n"
-            "This file is needed once to enable Google Drive uploads. "
-            "Contact the app developer to provide this file, then place it "
-            "in the application folder."
+            "Google Drive backup isn't set up in this build.\n\n"
+            "(Developer note: 'drive_credentials.json' is missing from the "
+            "app folder. This is a one-time file you generate yourself in "
+            "Google Cloud Console and bundle with the build - end clients "
+            "never need to provide or see it.)"
         )
 
     creds = None
