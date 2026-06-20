@@ -131,7 +131,8 @@ class InventoryView(ctk.CTkFrame):
             ctk.CTkLabel(row_frame, text=display_barcode, width=widths[1], text_color="#a0a0a9").pack(side="left", padx=4)
             ctk.CTkLabel(row_frame, text=name, width=widths[2], anchor="w", text_color="#ffffff", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=4)
             ctk.CTkLabel(row_frame, text=unit, width=widths[3], text_color="#8ed1fc").pack(side="left", padx=4)
-            ctk.CTkLabel(row_frame, text=str(qty), width=widths[4], text_color="#ffffff").pack(side="left", padx=4)
+            qty_display = str(int(qty)) if float(qty) == int(qty) else f"{round(float(qty), 3):g}"
+            ctk.CTkLabel(row_frame, text=qty_display, width=widths[4], text_color="#ffffff").pack(side="left", padx=4)
             ctk.CTkLabel(row_frame, text=f"Rs {cost:,.2f}", width=widths[5], text_color="#f0ad4e").pack(side="left", padx=4)
             ctk.CTkLabel(row_frame, text=f"Rs {sale:,.2f}", width=widths[6], text_color="#4aff8e").pack(side="left", padx=4)
             
@@ -248,7 +249,7 @@ class InventoryView(ctk.CTkFrame):
                 
             try:
                 # Type validation mechanics
-                int(q)
+                float(q)
                 float(c)
                 float(s)
             except ValueError:
@@ -351,7 +352,7 @@ class InventoryView(ctk.CTkFrame):
                 status = "SHORTAGE" if qty <= 5 else "OPTIMAL"
                 status_color = "ff4a4a" if qty <= 5 else "4aff4a"
 
-                row_vals = [ri - 3, name, barcode or "", unit, qty, round(cost, 2), round(sale, 2), status]
+                row_vals = [ri - 3, name, barcode or "", unit, round(qty, 4), round(cost, 2), round(sale, 2), status]
                 for ci, val in enumerate(row_vals, 1):
                     c = ws.cell(row=ri, column=ci, value=val)
                     c.fill = fill; c.border = border
@@ -485,7 +486,7 @@ class InventoryView(ctk.CTkFrame):
 
                     # Numeric validation
                     try:
-                        qty  = int(float(str(qty_raw)))
+                        qty  = round(float(str(qty_raw)), 4)
                         cost = float(str(cost_raw))
                         sale = float(str(sale_raw))
                     except (ValueError, TypeError):

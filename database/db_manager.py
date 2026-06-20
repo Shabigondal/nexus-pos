@@ -47,7 +47,7 @@ def init_db():
                         name TEXT NOT NULL,
                         barcode TEXT,
                         unit TEXT NOT NULL,
-                        quantity INTEGER NOT NULL,
+                        quantity REAL NOT NULL,
                         cost_price REAL NOT NULL,
                         sale_price REAL NOT NULL)''')
 
@@ -67,7 +67,7 @@ def init_db():
                         invoice_id INTEGER NOT NULL,
                         product_id INTEGER,
                         product_name TEXT,
-                        quantity INTEGER,
+                        quantity REAL,
                         cost_price REAL,
                         sale_price REAL,
                         line_total REAL,
@@ -92,7 +92,7 @@ def init_db():
                         adjustment_id INTEGER PRIMARY KEY AUTOINCREMENT,
                         product_id INTEGER NOT NULL,
                         product_name TEXT NOT NULL,
-                        quantity_change INTEGER NOT NULL,
+                        quantity_change REAL NOT NULL,
                         reason TEXT,
                         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY(product_id) REFERENCES inventory(product_id) ON DELETE CASCADE)''')
@@ -328,7 +328,7 @@ def add_product(name, barcode, unit, qty, cost, sale):
         b_val = barcode.strip() if barcode and barcode.strip() else None
         
         cursor.execute("""INSERT INTO inventory (name, barcode, unit, quantity, cost_price, sale_price) 
-                          VALUES (?, ?, ?, ?, ?, ?)""", (name, b_val, unit, int(qty), float(cost), float(sale)))
+                          VALUES (?, ?, ?, ?, ?, ?)""", (name, b_val, unit, float(qty), float(cost), float(sale)))
         conn.commit()
         conn.close()
         _sync_products_excel_safe()
@@ -363,11 +363,11 @@ def update_product(p_id, name, barcode, unit, qty, cost, sale):
         old_qty = old_row[0] if old_row else None
 
         cursor.execute("""UPDATE inventory SET name=?, barcode=?, unit=?, quantity=?, cost_price=?, sale_price=? 
-                          WHERE product_id=?""", (name, b_val, unit, int(qty), float(cost), float(sale), int(p_id)))
+                          WHERE product_id=?""", (name, b_val, unit, float(qty), float(cost), float(sale), int(p_id)))
 
         # Log manual stock adjustment if quantity changed (for daily reports)
-        if old_qty is not None and int(qty) != int(old_qty):
-            delta = int(qty) - int(old_qty)
+        if old_qty is not None and round(float(qty), 4) != round(float(old_qty), 4):
+            delta = round(float(qty) - float(old_qty), 4)
             cursor.execute("""INSERT INTO stock_adjustments (product_id, product_name, quantity_change, reason)
                               VALUES (?, ?, ?, ?)""", (int(p_id), name, delta, "Manual edit"))
 
@@ -423,11 +423,11 @@ def create_invoice(customer_name, subtotal, tax_percent, total, payment_mode, ca
             cursor.execute("""INSERT INTO invoice_items 
                               (invoice_id, product_id, product_name, quantity, cost_price, sale_price, line_total)
                               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                           (invoice_id, int(p_id), item_name, int(item_qty),
+                           (invoice_id, int(p_id), item_name, float(item_qty),
                             float(item_cost_price), float(item_sale_price), float(item_total)))
             
-            # Update real stock inventory status
-            cursor.execute("UPDATE inventory SET quantity = quantity - ? WHERE product_id = ?", (int(item_qty), int(p_id)))
+            # Update real stock inventory status (exact fractional deduction, e.g. 0.3567 litres)
+            cursor.execute("UPDATE inventory SET quantity = ROUND(quantity - ?, 4) WHERE product_id = ?", (float(item_qty), int(p_id)))
             
         conn.commit()
         conn.close()
@@ -811,7 +811,10 @@ def get_invoice_items_summary(invoice_id):
         conn.close()
         if not items:
             return ""
-        return ", ".join(f"{name} x {qty}" for name, qty in items)
+        def _fmt(q):
+            q = float(q)
+            return str(int(q)) if q == int(q) else f"{round(q, 3):g}"
+        return ", ".join(f"{name} x {_fmt(qty)}" for name, qty in items)
     except Exception:
         return ""
 
@@ -945,5 +948,71 @@ def get_daily_cashflow_summary():
     conn.close()
     return total_in, total_out
 
+
+# =================================================================
+# 🩹 ONE-TIME AUTO-MIGRATION: Fix historical truncated quantities
+# =================================================================
+# Before the fractional-quantity fix, sale quantity was saved using
+# int(), so e.g. 0.625 litres was stored as 0, 2.9 was stored as 2.
+# This silently repairs that OLD data on the customer's own machine,
+# the very first time they open the app after the update. It is safe
+# to call on every startup — it auto-skips itself after running once
+# (tracked via a settings flag), and only touches rows where the
+# stored quantity provably differs from line_total / sale_price.
+def _auto_repair_historical_fractional_quantities():
+    MIGRATION_FLAG = "fractional_qty_migration_v1_done"
+    try:
+        if get_setting(MIGRATION_FLAG, "") == "1":
+            return  # already ran on this database, never repeat
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT item_id, product_id, quantity, sale_price, line_total
+            FROM invoice_items
+        """)
+        rows = cursor.fetchall()
+
+        fixed_items = 0
+        inventory_deltas = {}
+
+        for item_id, product_id, stored_qty, sale_price, line_total in rows:
+            if not sale_price or line_total is None:
+                continue
+            recovered_qty = round(line_total / sale_price, 4)
+            stored_qty = stored_qty if stored_qty is not None else 0
+            diff = round(recovered_qty - stored_qty, 4)
+            if abs(diff) > 0.0005:
+                cursor.execute("UPDATE invoice_items SET quantity = ? WHERE item_id = ?", (recovered_qty, item_id))
+                fixed_items += 1
+                if product_id is not None:
+                    inventory_deltas[product_id] = inventory_deltas.get(product_id, 0.0) + diff
+
+        for product_id, delta in inventory_deltas.items():
+            cursor.execute(
+                "UPDATE inventory SET quantity = ROUND(quantity - ?, 4) WHERE product_id = ?",
+                (delta, product_id)
+            )
+
+        conn.commit()
+        conn.close()
+
+        # Mark this database as migrated so this never re-runs.
+        set_setting(MIGRATION_FLAG, "1")
+
+        if fixed_items:
+            print(f"🩹 Auto-repair: corrected {fixed_items} historical invoice item(s) "
+                  f"and {len(inventory_deltas)} product stock balance(s).")
+            try:
+                _sync_products_excel_safe()
+            except Exception:
+                pass
+    except Exception as e:
+        # Never block app startup because of this — fail silently, log only.
+        print(f"⚠️ Auto-repair skipped due to error: {e}")
+
+
 # Automatic operational execution schema block
 init_db()
+_auto_repair_historical_fractional_quantities()

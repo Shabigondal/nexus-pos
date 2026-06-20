@@ -20,10 +20,12 @@ def build_invoice_html(invoice_no, customer_name, date, subtotal, tax, total, ca
     cart_rows_html = ""
     for item in cart_items:
         _, name, qty, price, total_p, _ = item
+        qty_f = float(qty)
+        qty_display = str(int(qty_f)) if qty_f == int(qty_f) else f"{round(qty_f, 3):g}"
         cart_rows_html += f"""
         <tr>
             <td style='padding: 6px; border-bottom: 1px solid #eeeeee;'>{name}</td>
-            <td style='padding: 6px; border-bottom: 1px solid #eeeeee; text-align: center;'>{qty}</td>
+            <td style='padding: 6px; border-bottom: 1px solid #eeeeee; text-align: center;'>{qty_display}</td>
             <td style='padding: 6px; border-bottom: 1px solid #eeeeee; text-align: right;'>Rs.{price:.2f}</td>
             <td style='padding: 6px; border-bottom: 1px solid #eeeeee; text-align: right;'>Rs.{total_p:.2f}</td>
         </tr>
