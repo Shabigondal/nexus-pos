@@ -2,8 +2,15 @@ import customtkinter as ctk
 import database.db_manager as db
 import tkinter.messagebox as messagebox
 import tkinter.filedialog as filedialog
+import tkinter as tk
 import os
 import datetime
+
+try:
+    from tkcalendar import Calendar
+    CALENDAR_AVAILABLE = True
+except ImportError:
+    CALENDAR_AVAILABLE = False
 
 try:
     import openpyxl
@@ -12,6 +19,49 @@ try:
     XLSX_AVAILABLE = True
 except ImportError:
     XLSX_AVAILABLE = False
+
+
+def _friendly_action_label(action_type):
+    """Maps internal action_type codes to client-facing labels.
+    The engine tags an auto-overdraft transaction as 'OVERDRAFT_CREDIT'
+    internally, but customers should see the familiar word 'UDHAAR'."""
+    return "UDHAAR" if action_type == "OVERDRAFT_CREDIT" else action_type
+
+
+def _open_calendar_picker(parent, target_entry):
+    """Opens a small popup calendar; selecting a date fills target_entry
+    (a CTkEntry) with YYYY-MM-DD text, same format the date filters expect."""
+    if not CALENDAR_AVAILABLE:
+        messagebox.showwarning("Calendar Unavailable", "tkcalendar package is not installed.")
+        return
+
+    popup = tk.Toplevel(parent)
+    popup.title("Select Date")
+    popup.resizable(False, False)
+    popup.transient(parent.winfo_toplevel())
+    popup.grab_set()
+
+    existing = target_entry.get().strip()
+    cal_kwargs = dict(selectmode="day", date_pattern="yyyy-mm-dd",
+                       background="#1f293d", foreground="white",
+                       headersbackground="#121214", normalbackground="#16161a",
+                       weekendbackground="#16161a", selectbackground="#4a90e2")
+    if existing:
+        try:
+            y, m, d = [int(p) for p in existing.split("-")]
+            cal_kwargs.update(year=y, month=m, day=d)
+        except (ValueError, IndexError):
+            pass
+
+    cal = Calendar(popup, **cal_kwargs)
+    cal.pack(padx=10, pady=10)
+
+    def _pick():
+        target_entry.delete(0, "end")
+        target_entry.insert(0, cal.get_date())
+        popup.destroy()
+
+    ctk.CTkButton(popup, text="Select", height=28, command=_pick).pack(pady=(0, 10))
 
 class CreditLedgerView(ctk.CTkFrame):
     def __init__(self, parent):
@@ -331,11 +381,15 @@ class CreditLedgerView(ctk.CTkFrame):
 
         ctk.CTkLabel(filter_bar, text="From:", font=ctk.CTkFont(size=12), text_color="#8a8a93").pack(side="left", padx=(15, 5), pady=8)
         self.inp_pb_from = ctk.CTkEntry(filter_bar, placeholder_text="YYYY-MM-DD", width=110, height=32, fg_color="#121214", border_color="#222227")
-        self.inp_pb_from.pack(side="left", padx=5, pady=8)
+        self.inp_pb_from.pack(side="left", padx=(5, 0), pady=8)
+        ctk.CTkButton(filter_bar, text="📅", width=30, height=32, fg_color="#121214", border_color="#222227", border_width=1,
+                      command=lambda: _open_calendar_picker(self, self.inp_pb_from)).pack(side="left", padx=(2, 5), pady=8)
 
         ctk.CTkLabel(filter_bar, text="To:", font=ctk.CTkFont(size=12), text_color="#8a8a93").pack(side="left", padx=(10, 5), pady=8)
         self.inp_pb_to = ctk.CTkEntry(filter_bar, placeholder_text="YYYY-MM-DD", width=110, height=32, fg_color="#121214", border_color="#222227")
-        self.inp_pb_to.pack(side="left", padx=5, pady=8)
+        self.inp_pb_to.pack(side="left", padx=(5, 0), pady=8)
+        ctk.CTkButton(filter_bar, text="📅", width=30, height=32, fg_color="#121214", border_color="#222227", border_width=1,
+                      command=lambda: _open_calendar_picker(self, self.inp_pb_to)).pack(side="left", padx=(2, 5), pady=8)
 
         ctk.CTkButton(filter_bar, text="🔍 Apply", width=80, height=32, fg_color="#1f293d", font=ctk.CTkFont(size=12, weight="bold"), command=self.apply_pb_date_filter).pack(side="left", padx=(10, 5), pady=8)
 
@@ -476,7 +530,8 @@ class CreditLedgerView(ctk.CTkFrame):
             
             # Action Colors Parsing Matrix Tags
             act_colors = {'ADVANCE_DEPOSIT': '#4aff4a', 'CASH_WITHDRAWAL': '#ff9f43', 'PURCHASE_DEBIT': '#8ed1fc', 'UDHAAR': '#ff4a4a'}
-            ctk.CTkLabel(row, text=action, width=widths[1], text_color=act_colors.get(action, '#ffffff'), font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=4)
+            display_action = _friendly_action_label(action)
+            ctk.CTkLabel(row, text=display_action, width=widths[1], text_color=act_colors.get(display_action, '#ffffff'), font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=4)
             
             ctk.CTkLabel(row, text=desc[:28], width=widths[2], anchor="w", font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
             ctk.CTkLabel(row, text=f"{amt:,.1f}", width=widths[3], font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
@@ -783,12 +838,13 @@ class CreditLedgerView(ctk.CTkFrame):
         }
         for ri, (ts, action, desc, amt, closing, items_summary) in enumerate(logs, 4):
             fill = s["dark_fill"] if ri % 2 == 0 else s["darker_fill"]
-            row_vals = [len(logs) - ri + 4, ts, action, desc, round(amt, 2), round(closing, 2)]
+            display_action = _friendly_action_label(action)
+            row_vals = [len(logs) - ri + 4, ts, display_action, desc, round(amt, 2), round(closing, 2)]
             for ci, val in enumerate(row_vals, 1):
                 c = ws.cell(row=ri, column=ci, value=val)
                 c.fill = fill; c.border = s["border"]
                 if ci == 3:
-                    clr = action_colors.get(action, "f1f5f9")
+                    clr = action_colors.get(display_action, "f1f5f9")
                     c.font = Font(color=clr, bold=True, name="Arial", size=10)
                 elif ci in (5, 6):
                     c.number_format = '#,##0.00'
@@ -960,13 +1016,14 @@ class CreditLedgerView(ctk.CTkFrame):
 
             pb_rows = []
             for idx, (ts, action, desc, amt, closing, items_summary) in enumerate(logs, 1):
-                act_cls = action_color_map.get(action, "")
+                display_action = _friendly_action_label(action)
+                act_cls = action_color_map.get(display_action, "")
                 c_cls   = "green" if closing >= 0 else "red"
                 c_prefix = "Rs." if closing >= 0 else "-Rs."
                 pb_rows.append([
                     str(idx),
                     ts,
-                    (action, act_cls),
+                    (display_action, act_cls),
                     desc,
                     items_summary if items_summary else "—",
                     f"{amt:,.2f}",
@@ -976,7 +1033,7 @@ class CreditLedgerView(ctk.CTkFrame):
             # ── Summary block ────────────────────────────────────
             total_deposits    = sum(row[3] for row in logs if row[1] == "ADVANCE_DEPOSIT")
             total_withdrawals = sum(row[3] for row in logs if row[1] == "CASH_WITHDRAWAL")
-            total_purchases   = sum(row[3] for row in logs if row[1] in ("PURCHASE_DEBIT", "UDHAAR"))
+            total_purchases   = sum(row[3] for row in logs if row[1] in ("PURCHASE_DEBIT", "OVERDRAFT_CREDIT", "UDHAAR"))
 
             summary_rows = [
                 ("Customer Name:",   name),
