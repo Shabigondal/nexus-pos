@@ -9,7 +9,7 @@ startup check (popup if a new version is found) and the manual
 
 import requests
 
-CURRENT_VERSION = "v1.2.4"
+CURRENT_VERSION = "v1.2.5"
 GITHUB_REPO_URL = "https://api.github.com/repos/Shabigondal/nexus-pos/releases/latest"
 
 

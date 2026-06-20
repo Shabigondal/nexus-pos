@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import database.db_manager as db
 from modules.invoice_print import InvoicePrintWindow, export_invoice_pdf
+from modules.pdf_export import build_table_html, export_html_to_pdf
 import tkinter.messagebox as messagebox
 import tkinter.filedialog as filedialog
 from tkcalendar import DateEntry
@@ -229,6 +230,16 @@ class AnalyticalReportsView(ctk.CTkFrame):
             command=self.export_to_csv
         )
         self.btn_export.pack(side="right", padx=(6, 0))
+
+        # Export as PDF button
+        self.btn_export_pdf = ctk.CTkButton(
+            bottom_row, text="📄  Export as PDF", height=32, width=150,
+            corner_radius=6, fg_color=COL_DANGER_BG, hover_color="#3a1c1c",
+            text_color=COL_DANGER, border_color="#5a2d2d", border_width=1,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self.export_to_pdf
+        )
+        self.btn_export_pdf.pack(side="right", padx=(6, 0))
 
         # =================================================================
         # 📋 RIGHT PANEL: INVOICE DETAIL & ACTIONS
@@ -634,6 +645,117 @@ class AnalyticalReportsView(ctk.CTkFrame):
                 self._export_csv_fallback(save_path)
         except Exception as e:
             messagebox.showerror("Export Failed", f"Could not save file:\n{str(e)}")
+
+    # ─────────────────────────────────────────────────────────────────
+    # 📄 EXPORT AS PDF (Invoice Summary, with Profit)
+    # ─────────────────────────────────────────────────────────────────
+    def export_to_pdf(self):
+        if not self.cached_invoices:
+            messagebox.showwarning("No Data", "No invoices to export. Apply a filter first.")
+            return
+
+        # Build suggested filename + range label (same logic as Excel export)
+        if self.filter_mode == "month":
+            month_name = self.month_var.get()
+            year = self.year_var.get()
+            default_name = f"Invoices_{month_name}_{year}"
+            range_label = f"{month_name} {year}"
+        else:
+            start_dt = self.inp_start_date.get_date()
+            end_dt = self.inp_end_date.get_date()
+            default_name = f"Invoices_{start_dt.strftime('%Y%m%d')}_to_{end_dt.strftime('%Y%m%d')}"
+            range_label = f"{start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')}"
+
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF File", "*.pdf"), ("All Files", "*.*")],
+            initialfile=default_name + ".pdf",
+            title="Export Invoices as PDF — Save As"
+        )
+        if not save_path:
+            return
+
+        try:
+            headers = ["Invoice No", "Customer", "Date & Time", "Payment Mode",
+                       "Subtotal", "Tax %", "Net Amount", "Profit", "Margin %", "Discount"]
+            col_classes = ["center", "", "center", "center", "right", "center", "right", "right", "right", "right"]
+            col_widths = [9, 17, 14, 11, 10, 6, 10, 9, 7, 7]
+
+            rows = []
+            total_revenue = 0
+            total_profit_sum = 0
+            profit_count = 0
+
+            for inv in self.cached_invoices:
+                inv_id, cust_name, subtotal, tax_pct, net_amount, timestamp, pay_mode, profit, discount_amount, discount_note = inv
+                total_revenue += net_amount
+
+                if profit is not None:
+                    total_profit_sum += profit
+                    profit_count += 1
+                    margin = (profit / subtotal * 100) if subtotal else 0
+                    profit_cell = (f"{profit:,.2f}", "blue")
+                    margin_cell = f"{margin:.1f}%"
+                else:
+                    profit_cell = "—"
+                    margin_cell = "—"
+
+                rows.append([
+                    f"INV-{inv_id:04d}",
+                    cust_name or "Walk-in Customer",
+                    timestamp,
+                    pay_mode,
+                    f"{subtotal:,.2f}",
+                    f"{tax_pct}%",
+                    f"{net_amount:,.2f}",
+                    profit_cell,
+                    margin_cell,
+                    f"{float(discount_amount):,.2f}" if discount_amount else "0.00",
+                ])
+
+            totals_row = [
+                ("TOTALS", "bold"), "", "", "", "", "",
+                (f"{total_revenue:,.2f}", "green"),
+                (f"{total_profit_sum:,.2f}", "blue") if profit_count > 0 else "—",
+                "", "",
+            ]
+
+            avg_invoice = total_revenue / len(self.cached_invoices) if self.cached_invoices else 0
+
+            summary_rows = [
+                ("Report Range:", range_label),
+                ("Total Invoices:", str(len(self.cached_invoices))),
+                ("Total Revenue:", f"Rs. {total_revenue:,.2f}"),
+                ("Total Profit:", f"Rs. {total_profit_sum:,.2f}" if profit_count > 0 else "—"),
+                ("Average Invoice:", f"Rs. {avg_invoice:,.2f}"),
+            ]
+
+            html = build_table_html(
+                title="📊 Invoice & Profit Report",
+                subtitle=f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                headers=headers,
+                rows=rows,
+                col_classes=col_classes,
+                orientation="landscape",
+                summary_rows=summary_rows,
+                totals_row=totals_row,
+                col_widths=col_widths,
+            )
+
+            success, msg = export_html_to_pdf(html, save_path)
+            if success:
+                messagebox.showinfo(
+                    "Export Successful ✅",
+                    f"{len(self.cached_invoices)} invoices exported to PDF!\n\nFile saved at:\n{save_path}"
+                )
+                try:
+                    os.startfile(save_path)
+                except Exception:
+                    pass
+            else:
+                messagebox.showerror("Export Failed", msg)
+        except Exception as e:
+            messagebox.showerror("Export Failed", f"Could not save PDF:\n{str(e)}")
 
     def _export_xlsx(self, save_path):
         """Full professional Excel export with profit columns and per-invoice item breakdown"""

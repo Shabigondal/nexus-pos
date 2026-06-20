@@ -22,6 +22,7 @@ import datetime
 from modules.product_reports_engine import (
     get_product_daily_report, get_period_presets, get_available_years, get_year_range
 )
+from modules.pdf_export import build_table_html, export_html_to_pdf
 
 try:
     import openpyxl
@@ -100,6 +101,13 @@ class ProductDailyReportView(ctk.CTkFrame):
             fg_color="#1f293d", hover_color="#2d3d5a",
             font=ctk.CTkFont(size=12, weight="bold"),
             command=self.export_excel
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            row1, text="Download PDF", height=32, width=130, corner_radius=6,
+            fg_color="#3a1c1c", hover_color="#5a2d2d", text_color="#ff9f9f",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self.export_pdf
         ).pack(side="left")
 
         # ── Row 2: Quick Presets ──
@@ -367,3 +375,92 @@ class ProductDailyReportView(ctk.CTkFrame):
             messagebox.showinfo("Export Successful", f"Report saved to:\n{save_path}")
         except Exception as e:
             messagebox.showerror("Export Failed", f"Could not save report:\n{e}")
+
+    # -----------------------------------------------------------------
+    # PDF export
+    # -----------------------------------------------------------------
+    def export_pdf(self):
+        if not self.cached_rows:
+            messagebox.showwarning("No Data", "Generate a report first before exporting.")
+            return
+
+        start = self.inp_start_date.get_date().strftime("%Y-%m-%d")
+        end = self.inp_end_date.get_date().strftime("%Y-%m-%d")
+        default_name = f"product_report_{start}_to_{end}.pdf"
+
+        save_path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Save Product Report As PDF",
+            initialfile=default_name,
+            defaultextension=".pdf",
+            filetypes=(("PDF File", "*.pdf"), ("All Files", "*.*"))
+        )
+
+        if not save_path:
+            return
+
+        try:
+            headers = ["Date", "Product", "Available", "Sold", "Remaining", "Revenue", "Cost", "Profit"]
+            col_classes = ["", "", "right", "right", "right", "right", "right", "right"]
+            col_widths = [11, 23, 10, 9, 11, 13, 11, 12]
+
+            rows = []
+            total_revenue = 0
+            total_cost = 0
+            total_profit = 0
+
+            for row in self.cached_rows:
+                total_revenue += row["revenue"]
+                total_cost += row["cost"]
+                total_profit += row["profit"]
+
+                rows.append([
+                    row["date"],
+                    row["product_name"],
+                    str(row["available"]),
+                    str(row["sold"]),
+                    str(row["remaining"]),
+                    f"{row['revenue']:,.2f}",
+                    f"{row['cost']:,.2f}",
+                    (f"{row['profit']:,.2f}", "green" if row["profit"] >= 0 else "red"),
+                ])
+
+            totals_row = [
+                ("TOTALS", "bold"), "", "", "", "",
+                (f"{total_revenue:,.2f}", "green"),
+                (f"{total_cost:,.2f}", ""),
+                (f"{total_profit:,.2f}", "green" if total_profit >= 0 else "red"),
+            ]
+
+            summary_rows = [
+                ("Report Range:", f"{start} to {end}"),
+                ("Total Rows:", str(len(self.cached_rows))),
+                ("Total Revenue:", f"Rs. {total_revenue:,.2f}"),
+                ("Total Cost:", f"Rs. {total_cost:,.2f}"),
+                ("Total Profit:", f"Rs. {total_profit:,.2f}"),
+            ]
+
+            html = build_table_html(
+                title="📦 Product Daily Report",
+                subtitle=f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                headers=headers,
+                rows=rows,
+                col_classes=col_classes,
+                orientation="landscape",
+                summary_rows=summary_rows,
+                totals_row=totals_row,
+                col_widths=col_widths,
+            )
+
+            success, msg = export_html_to_pdf(html, save_path)
+            if success:
+                messagebox.showinfo("Export Successful", f"Report saved to:\n{save_path}")
+                try:
+                    import os
+                    os.startfile(save_path)
+                except Exception:
+                    pass
+            else:
+                messagebox.showerror("Export Failed", msg)
+        except Exception as e:
+            messagebox.showerror("Export Failed", f"Could not save PDF:\n{e}")
