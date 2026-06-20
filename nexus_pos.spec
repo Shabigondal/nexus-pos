@@ -7,6 +7,7 @@
 # Output:
 #     dist/NexusPOS/NexusPOS.exe   (folder build - faster startup, recommended)
 
+import os
 import sys
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
@@ -40,6 +41,13 @@ datas += collect_data_files('tkinterweb')
 
 # Bundle the assets folder (shop logo, etc.) so it's available next to the exe
 datas += [('assets', 'assets')]
+
+# Bundle the Google Drive OAuth client file (one-time file YOU generate in
+# Google Cloud Console - see README/BUILD_GUIDE). If present at build time,
+# it ships automatically inside dist/NexusPOS/ next to NexusPOS.exe, so the
+# client never has to download, place, or even know this file exists.
+if os.path.exists('drive_credentials.json'):
+    datas += [('drive_credentials.json', '.')]
 
 a = Analysis(
     ['main.py'],
