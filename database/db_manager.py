@@ -270,6 +270,80 @@ def get_dashboard_summary():
         "total_udhaar": total_udhaar or 0.0,
     }
 
+def get_today_summary():
+    """Aaj ka summary: revenue, profit, invoices, cash in, cash out."""
+    import sqlite3
+    from datetime import date
+    today = date.today().strftime("%Y-%m-%d")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Today revenue (net_amount from invoices created today)
+    cursor.execute("""
+        SELECT COALESCE(SUM(net_amount), 0), COUNT(*)
+        FROM invoices
+        WHERE DATE(date) = ?
+    """, (today,))
+    today_revenue, today_invoices = cursor.fetchone()
+
+    # Today profit (from invoice_items joined to today's invoices)
+    cursor.execute("""
+        SELECT COALESCE(SUM((ii.sale_price - ii.cost_price) * ii.quantity), 0)
+        FROM invoice_items ii
+        JOIN invoices inv ON ii.invoice_id = inv.invoice_id
+        WHERE DATE(inv.date) = ?
+    """, (today,))
+    today_profit = cursor.fetchone()[0]
+
+    # Today household expenses (cash out)
+    today_household = 0.0
+    try:
+        cursor.execute("""
+            SELECT COALESCE(SUM(amount), 0)
+            FROM household_expenses
+            WHERE DATE(expense_date) = ?
+        """, (today,))
+        today_household = cursor.fetchone()[0] or 0.0
+    except Exception:
+        pass
+
+    conn.close()
+
+    # Cash In = today's invoice revenue (actual money received)
+    cash_in = today_revenue or 0.0
+
+    # Cash Out = household expenses + udhaar given today (from ledger)
+    today_udhaar_out = 0.0
+    try:
+        ledger_conn = sqlite3.connect("database/pos_system.db")
+        ledger_cursor = ledger_conn.cursor()
+        # Udhaar disbursed today (negative wallet transactions = money given out)
+        ledger_cursor.execute("""
+            SELECT COALESCE(SUM(ABS(amount)), 0)
+            FROM ledger_transactions
+            WHERE DATE(transaction_date) = ?
+              AND transaction_type IN ('UDHAAR', 'DEBIT', 'OVERDRAFT_CREDIT')
+              AND amount < 0
+        """, (today,))
+        today_udhaar_out = ledger_cursor.fetchone()[0] or 0.0
+        ledger_conn.close()
+    except Exception:
+        pass
+
+    cash_out = (today_household or 0.0) + (today_udhaar_out or 0.0)
+
+    return {
+        "today_revenue":  today_revenue  or 0.0,
+        "today_profit":   today_profit   or 0.0,
+        "today_invoices": today_invoices or 0,
+        "cash_in":        cash_in,
+        "cash_out":       cash_out,
+        "today_household": today_household or 0.0,
+        "today_udhaar_out": today_udhaar_out or 0.0,
+    }
+
+
 def is_first_run():
     """Check if administrator table is vacant."""
     if not os.path.exists(DB_PATH):
