@@ -1038,17 +1038,24 @@ def init_dealer_tables():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Main dealers table
+    # Main dealers table (with unit column)
     cursor.execute('''CREATE TABLE IF NOT EXISTS dealers (
                         dealer_id INTEGER PRIMARY KEY AUTOINCREMENT,
                         dealer_name TEXT NOT NULL,
                         dealer_contact TEXT,
                         item_name TEXT NOT NULL,
+                        unit TEXT NOT NULL DEFAULT 'Liter',
                         quantity REAL NOT NULL,
                         total_cost REAL NOT NULL,
                         per_item_cost REAL NOT NULL,
                         date_added TEXT NOT NULL,
                         last_updated TEXT NOT NULL)''')
+
+    # Migration: add unit column to existing dealers table if not present
+    cursor.execute("PRAGMA table_info(dealers)")
+    existing_cols = [c[1] for c in cursor.fetchall()]
+    if "unit" not in existing_cols:
+        cursor.execute("ALTER TABLE dealers ADD COLUMN unit TEXT NOT NULL DEFAULT 'Liter'")
 
     # Dealer history/audit log table
     cursor.execute('''CREATE TABLE IF NOT EXISTS dealer_history (
@@ -1058,12 +1065,19 @@ def init_dealer_tables():
                         dealer_name TEXT,
                         dealer_contact TEXT,
                         item_name TEXT,
+                        unit TEXT DEFAULT 'Liter',
                         quantity REAL,
                         total_cost REAL,
                         per_item_cost REAL,
                         action_date TEXT NOT NULL,
                         notes TEXT DEFAULT '',
                         FOREIGN KEY(dealer_id) REFERENCES dealers(dealer_id) ON DELETE CASCADE)''')
+
+    # Migration: add unit column to existing dealer_history table if not present
+    cursor.execute("PRAGMA table_info(dealer_history)")
+    hist_cols = [c[1] for c in cursor.fetchall()]
+    if "unit" not in hist_cols:
+        cursor.execute("ALTER TABLE dealer_history ADD COLUMN unit TEXT DEFAULT 'Liter'")
 
     conn.commit()
     conn.close()
@@ -1075,13 +1089,13 @@ def get_all_dealers(search_query=""):
     cursor = conn.cursor()
     if search_query:
         like = f"%{search_query}%"
-        cursor.execute("""SELECT dealer_id, dealer_name, dealer_contact, item_name,
+        cursor.execute("""SELECT dealer_id, dealer_name, dealer_contact, item_name, unit,
                                  quantity, total_cost, per_item_cost, date_added, last_updated
                           FROM dealers
                           WHERE dealer_name LIKE ? OR item_name LIKE ? OR dealer_contact LIKE ?
                           ORDER BY last_updated DESC""", (like, like, like))
     else:
-        cursor.execute("""SELECT dealer_id, dealer_name, dealer_contact, item_name,
+        cursor.execute("""SELECT dealer_id, dealer_name, dealer_contact, item_name, unit,
                                  quantity, total_cost, per_item_cost, date_added, last_updated
                           FROM dealers ORDER BY last_updated DESC""")
     rows = cursor.fetchall()
@@ -1089,7 +1103,7 @@ def get_all_dealers(search_query=""):
     return rows
 
 
-def add_dealer(dealer_name, dealer_contact, item_name, quantity, total_cost, notes=""):
+def add_dealer(dealer_name, dealer_contact, item_name, unit, quantity, total_cost, notes=""):
     """Naya dealer add karo aur history mein record karo."""
     from datetime import datetime
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1098,24 +1112,24 @@ def add_dealer(dealer_name, dealer_contact, item_name, quantity, total_cost, not
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""INSERT INTO dealers
-                      (dealer_name, dealer_contact, item_name, quantity, total_cost, per_item_cost, date_added, last_updated)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                   (dealer_name.strip(), dealer_contact.strip(), item_name.strip(),
+                      (dealer_name, dealer_contact, item_name, unit, quantity, total_cost, per_item_cost, date_added, last_updated)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (dealer_name.strip(), dealer_contact.strip(), item_name.strip(), unit.strip(),
                     quantity, total_cost, per_item_cost, now, now))
     dealer_id = cursor.lastrowid
 
     cursor.execute("""INSERT INTO dealer_history
-                      (dealer_id, action, dealer_name, dealer_contact, item_name,
+                      (dealer_id, action, dealer_name, dealer_contact, item_name, unit,
                        quantity, total_cost, per_item_cost, action_date, notes)
-                      VALUES (?, 'ADDED', ?, ?, ?, ?, ?, ?, ?, ?)""",
-                   (dealer_id, dealer_name.strip(), dealer_contact.strip(), item_name.strip(),
+                      VALUES (?, 'ADDED', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (dealer_id, dealer_name.strip(), dealer_contact.strip(), item_name.strip(), unit.strip(),
                     quantity, total_cost, per_item_cost, now, notes))
     conn.commit()
     conn.close()
     return dealer_id
 
 
-def update_dealer(dealer_id, dealer_name, dealer_contact, item_name, quantity, total_cost, notes=""):
+def update_dealer(dealer_id, dealer_name, dealer_contact, item_name, unit, quantity, total_cost, notes=""):
     """Dealer update karo aur purani values history mein save karo."""
     from datetime import datetime
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1124,17 +1138,17 @@ def update_dealer(dealer_id, dealer_name, dealer_contact, item_name, quantity, t
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""UPDATE dealers SET
-                      dealer_name=?, dealer_contact=?, item_name=?, quantity=?,
+                      dealer_name=?, dealer_contact=?, item_name=?, unit=?, quantity=?,
                       total_cost=?, per_item_cost=?, last_updated=?
                       WHERE dealer_id=?""",
-                   (dealer_name.strip(), dealer_contact.strip(), item_name.strip(),
+                   (dealer_name.strip(), dealer_contact.strip(), item_name.strip(), unit.strip(),
                     quantity, total_cost, per_item_cost, now, dealer_id))
 
     cursor.execute("""INSERT INTO dealer_history
-                      (dealer_id, action, dealer_name, dealer_contact, item_name,
+                      (dealer_id, action, dealer_name, dealer_contact, item_name, unit,
                        quantity, total_cost, per_item_cost, action_date, notes)
-                      VALUES (?, 'UPDATED', ?, ?, ?, ?, ?, ?, ?, ?)""",
-                   (dealer_id, dealer_name.strip(), dealer_contact.strip(), item_name.strip(),
+                      VALUES (?, 'UPDATED', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (dealer_id, dealer_name.strip(), dealer_contact.strip(), item_name.strip(), unit.strip(),
                     quantity, total_cost, per_item_cost, now, notes))
     conn.commit()
     conn.close()
@@ -1153,7 +1167,7 @@ def get_dealer_history(dealer_id):
     """Kisi ek dealer ki poori history fetch karo."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""SELECT history_id, action, dealer_name, dealer_contact, item_name,
+    cursor.execute("""SELECT history_id, action, dealer_name, dealer_contact, item_name, unit,
                              quantity, total_cost, per_item_cost, action_date, notes
                       FROM dealer_history
                       WHERE dealer_id=?
