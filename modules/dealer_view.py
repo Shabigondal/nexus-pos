@@ -311,7 +311,15 @@ class DealerView(ctk.CTkFrame):
                            corner_radius=4, height=36)
         hdr.pack(fill="x", pady=(0, 6))
         hdr.pack_propagate(False)
-        for label, w, anc in cols:
+
+        # Pack Actions header FIRST on right (same trick as data rows)
+        ctk.CTkLabel(
+            hdr, text="Actions", width=112, anchor="center",
+            font=ctk.CTkFont(size=11, weight="bold"), text_color="#4a90e2"
+        ).pack(side="right", padx=8)
+
+        # Then remaining headers left-to-right
+        for label, w, anc in cols[:-1]:
             ctk.CTkLabel(
                 hdr, text=label, width=w, anchor=anc,
                 font=ctk.CTkFont(size=11, weight="bold"), text_color="#4a90e2"
@@ -342,40 +350,42 @@ class DealerView(ctk.CTkFrame):
             rf.pack(fill="x", pady=2)
             rf.pack_propagate(False)
 
-            ctk.CTkLabel(rf, text=str(sno),         width=widths[0], anchor="center", text_color="gray").pack(side="left", padx=3)
-            ctk.CTkLabel(rf, text=d_name,            width=widths[1], anchor="w",      text_color="#ffffff", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=3)
-            ctk.CTkLabel(rf, text=con_str,           width=widths[2], anchor="center", text_color="#a0a0a9").pack(side="left", padx=3)
-            ctk.CTkLabel(rf, text=item_name,         width=widths[3], anchor="w",      text_color="#8ed1fc").pack(side="left", padx=3)
-            ctk.CTkLabel(rf, text=unit_str,          width=widths[4], anchor="center", text_color="#c792ea").pack(side="left", padx=3)
-            ctk.CTkLabel(rf, text=qty_str,           width=widths[5], anchor="center", text_color="#ffffff").pack(side="left", padx=3)
-            ctk.CTkLabel(rf, text=f"Rs {total_cost:,.2f}", width=widths[6], anchor="center", text_color="#f0ad4e").pack(side="left", padx=3)
-            ctk.CTkLabel(rf, text=f"Rs {per_item:,.2f}",  width=widths[7], anchor="center", text_color="#4aff8e").pack(side="left", padx=3)
-            ctk.CTkLabel(rf, text=date_str,          width=widths[8], anchor="center", text_color="#a0a0a9").pack(side="left", padx=3)
-
-            # ── ACTION BUTTONS (fixed right side) ─────────────────────────────
-            act = ctk.CTkFrame(rf, fg_color="transparent")
-            act.pack(side="right", padx=6)
+            # ── ACTION BUTTONS — pack FIRST so they always stay visible on right ──
+            act = ctk.CTkFrame(rf, fg_color="transparent", width=112)
+            act.pack(side="right", padx=8)
+            act.pack_propagate(False)
 
             ctk.CTkButton(
                 act, text="📋", width=32, height=28, corner_radius=4,
                 fg_color="#1c3a27", hover_color="#2a5a3b", text_color="#4aff4a",
-                font=ctk.CTkFont(size=14),
+                font=ctk.CTkFont(size=13),
                 command=lambda did=d_id, dn=d_name: self.open_history_modal(did, dn)
             ).pack(side="left", padx=2)
 
             ctk.CTkButton(
                 act, text="✏️", width=32, height=28, corner_radius=4,
                 fg_color="#2b3a4a", hover_color="#3d5268",
-                font=ctk.CTkFont(size=14),
+                font=ctk.CTkFont(size=13),
                 command=lambda r=row: self.open_edit_modal(r)
             ).pack(side="left", padx=2)
 
             ctk.CTkButton(
                 act, text="🗑️", width=32, height=28, corner_radius=4,
                 fg_color="#3a1c1c", hover_color="#542424", text_color="#ff8080",
-                font=ctk.CTkFont(size=14),
+                font=ctk.CTkFont(size=13),
                 command=lambda did=d_id, dn=d_name: self._confirm_delete(did, dn)
             ).pack(side="left", padx=2)
+
+            # ── DATA LABELS — pack after actions so they fill remaining space ──
+            ctk.CTkLabel(rf, text=str(sno),               width=widths[0], anchor="center", text_color="gray").pack(side="left", padx=3)
+            ctk.CTkLabel(rf, text=d_name,                 width=widths[1], anchor="w",      text_color="#ffffff", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=3)
+            ctk.CTkLabel(rf, text=con_str,                width=widths[2], anchor="center", text_color="#a0a0a9").pack(side="left", padx=3)
+            ctk.CTkLabel(rf, text=item_name,              width=widths[3], anchor="w",      text_color="#8ed1fc").pack(side="left", padx=3)
+            ctk.CTkLabel(rf, text=unit_str,               width=widths[4], anchor="center", text_color="#c792ea").pack(side="left", padx=3)
+            ctk.CTkLabel(rf, text=qty_str,                width=widths[5], anchor="center", text_color="#ffffff").pack(side="left", padx=3)
+            ctk.CTkLabel(rf, text=f"Rs {total_cost:,.2f}",width=widths[6], anchor="center", text_color="#f0ad4e").pack(side="left", padx=3)
+            ctk.CTkLabel(rf, text=f"Rs {per_item:,.2f}",  width=widths[7], anchor="center", text_color="#4aff8e").pack(side="left", padx=3)
+            ctk.CTkLabel(rf, text=date_str,               width=widths[8], anchor="center", text_color="#a0a0a9").pack(side="left", padx=3)
 
     # ── PAGINATION ────────────────────────────────────────────────────────────
     def _prev_page(self):
