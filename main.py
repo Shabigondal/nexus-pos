@@ -13,6 +13,7 @@ from modules.credit_ledger import CreditLedgerView
 from modules.dashboard import DashboardView
 from modules.settings import SettingsView
 from modules.product_daily_report import ProductDailyReportView
+from modules.dealer_view import DealerView
 from modules.update_checker import check_for_update, CURRENT_VERSION
 from modules.backup_manager import sync_db_to_drive
 from database.db_manager import get_setting
@@ -105,6 +106,7 @@ class EnterpriseBillingApp(ctk.CTk):
         self.create_menu_item("Credit Ledger (Khata)", lambda: self.route_khata())
         self.create_menu_item("Analytical Reports", lambda: self.route_reports())
         self.create_menu_item("Product Daily Report", lambda: self.route_product_daily_report())
+        self.create_menu_item("Dealer Management", lambda: self.route_dealers())
         self.create_menu_item("System Configuration", lambda: self.route_settings())
 
         self.status_lbl = ctk.CTkLabel(self.side_panel, text=f"Engine State: {CURRENT_VERSION}",
@@ -178,6 +180,14 @@ class EnterpriseBillingApp(ctk.CTk):
 
         report_panel = ProductDailyReportView(self.workspace)
         report_panel.pack(fill="both", expand=True, padx=30, pady=(0, 30))
+
+    def route_dealers(self):
+        self.reset_workspace()
+        header = ctk.CTkLabel(self.workspace, text="Dealer Management Panel",
+                              font=ctk.CTkFont(family="Arial", size=20, weight="bold"), text_color="#ffffff")
+        header.pack(anchor="w", padx=30, pady=(25, 10))
+        dealer_panel = DealerView(self.workspace)
+        dealer_panel.pack(fill="both", expand=True, padx=30, pady=(0, 30))
 
     def route_settings(self):
         self.reset_workspace()

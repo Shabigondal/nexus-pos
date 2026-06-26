@@ -1028,6 +1028,142 @@ def _auto_repair_historical_fractional_quantities():
         print(f"⚠️ Auto-repair skipped due to error: {e}")
 
 
+
+# =================================================================
+# 🏭 DEALER MANAGEMENT MODULE — DATABASE LAYER
+# =================================================================
+
+def init_dealer_tables():
+    """Dealer module ke liye saare tables create karo agar exist nahi karte."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Main dealers table
+    cursor.execute('''CREATE TABLE IF NOT EXISTS dealers (
+                        dealer_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        dealer_name TEXT NOT NULL,
+                        dealer_contact TEXT,
+                        item_name TEXT NOT NULL,
+                        quantity REAL NOT NULL,
+                        total_cost REAL NOT NULL,
+                        per_item_cost REAL NOT NULL,
+                        date_added TEXT NOT NULL,
+                        last_updated TEXT NOT NULL)''')
+
+    # Dealer history/audit log table
+    cursor.execute('''CREATE TABLE IF NOT EXISTS dealer_history (
+                        history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        dealer_id INTEGER NOT NULL,
+                        action TEXT NOT NULL,
+                        dealer_name TEXT,
+                        dealer_contact TEXT,
+                        item_name TEXT,
+                        quantity REAL,
+                        total_cost REAL,
+                        per_item_cost REAL,
+                        action_date TEXT NOT NULL,
+                        notes TEXT DEFAULT '',
+                        FOREIGN KEY(dealer_id) REFERENCES dealers(dealer_id) ON DELETE CASCADE)''')
+
+    conn.commit()
+    conn.close()
+
+
+def get_all_dealers(search_query=""):
+    """Saare dealers fetch karo — search support ke saath."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if search_query:
+        like = f"%{search_query}%"
+        cursor.execute("""SELECT dealer_id, dealer_name, dealer_contact, item_name,
+                                 quantity, total_cost, per_item_cost, date_added, last_updated
+                          FROM dealers
+                          WHERE dealer_name LIKE ? OR item_name LIKE ? OR dealer_contact LIKE ?
+                          ORDER BY last_updated DESC""", (like, like, like))
+    else:
+        cursor.execute("""SELECT dealer_id, dealer_name, dealer_contact, item_name,
+                                 quantity, total_cost, per_item_cost, date_added, last_updated
+                          FROM dealers ORDER BY last_updated DESC""")
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def add_dealer(dealer_name, dealer_contact, item_name, quantity, total_cost, notes=""):
+    """Naya dealer add karo aur history mein record karo."""
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    per_item_cost = round(total_cost / quantity, 4) if quantity else 0
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""INSERT INTO dealers
+                      (dealer_name, dealer_contact, item_name, quantity, total_cost, per_item_cost, date_added, last_updated)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (dealer_name.strip(), dealer_contact.strip(), item_name.strip(),
+                    quantity, total_cost, per_item_cost, now, now))
+    dealer_id = cursor.lastrowid
+
+    cursor.execute("""INSERT INTO dealer_history
+                      (dealer_id, action, dealer_name, dealer_contact, item_name,
+                       quantity, total_cost, per_item_cost, action_date, notes)
+                      VALUES (?, 'ADDED', ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (dealer_id, dealer_name.strip(), dealer_contact.strip(), item_name.strip(),
+                    quantity, total_cost, per_item_cost, now, notes))
+    conn.commit()
+    conn.close()
+    return dealer_id
+
+
+def update_dealer(dealer_id, dealer_name, dealer_contact, item_name, quantity, total_cost, notes=""):
+    """Dealer update karo aur purani values history mein save karo."""
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    per_item_cost = round(total_cost / quantity, 4) if quantity else 0
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""UPDATE dealers SET
+                      dealer_name=?, dealer_contact=?, item_name=?, quantity=?,
+                      total_cost=?, per_item_cost=?, last_updated=?
+                      WHERE dealer_id=?""",
+                   (dealer_name.strip(), dealer_contact.strip(), item_name.strip(),
+                    quantity, total_cost, per_item_cost, now, dealer_id))
+
+    cursor.execute("""INSERT INTO dealer_history
+                      (dealer_id, action, dealer_name, dealer_contact, item_name,
+                       quantity, total_cost, per_item_cost, action_date, notes)
+                      VALUES (?, 'UPDATED', ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (dealer_id, dealer_name.strip(), dealer_contact.strip(), item_name.strip(),
+                    quantity, total_cost, per_item_cost, now, notes))
+    conn.commit()
+    conn.close()
+
+
+def delete_dealer(dealer_id):
+    """Dealer delete karo (history bhi cascade se delete hogi)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM dealers WHERE dealer_id=?", (dealer_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_dealer_history(dealer_id):
+    """Kisi ek dealer ki poori history fetch karo."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""SELECT history_id, action, dealer_name, dealer_contact, item_name,
+                             quantity, total_cost, per_item_cost, action_date, notes
+                      FROM dealer_history
+                      WHERE dealer_id=?
+                      ORDER BY action_date DESC""", (dealer_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
 # Automatic operational execution schema block
 init_db()
+init_dealer_tables()
 _auto_repair_historical_fractional_quantities()
