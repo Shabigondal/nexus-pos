@@ -215,88 +215,160 @@ def _fetch_cash_out(date_from: str, date_to: str) -> list[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 class _CashTable(ctk.CTkFrame):
     HEADERS    = ["#", "Date", "Source", "Ref", "Party / Category", "Description", "Amount (Rs)"]
-    COL_WIDTHS = [30, 90, 140, 80, 170, 220, 110]   # canvas column widths (px)
+    COL_WIDTHS = [30, 90, 140, 80, 170, 220, 110]
+    PAGE_SIZE  = 12
 
     def __init__(self, parent, accent_color, **kwargs):
         super().__init__(parent, fg_color=BG_PANEL, corner_radius=10, **kwargs)
-        self._accent = accent_color
-        self._rows   = []
+        self._accent   = accent_color
+        self._all_rows = []   # full dataset
+        self._cur_page = 1
         self._build()
 
     # ── layout ──────────────────────────────────────────────────────────────
     def _build(self):
-        # Header row
+        # Column header
         hdr = ctk.CTkFrame(self, fg_color=BG_CARD, corner_radius=0, height=36)
-        hdr.pack(fill="x", padx=0, pady=(0, 1))
+        hdr.pack(fill="x", pady=(0, 1))
         hdr.pack_propagate(False)
         hdr_inner = ctk.CTkFrame(hdr, fg_color="transparent")
         hdr_inner.pack(fill="both", expand=True, padx=6)
-        for i, (h, w) in enumerate(zip(self.HEADERS, self.COL_WIDTHS)):
+        for h, w in zip(self.HEADERS, self.COL_WIDTHS):
             anchor = "e" if h == "Amount (Rs)" else "w"
-            lbl = ctk.CTkLabel(hdr_inner, text=h, width=w,
-                               font=ctk.CTkFont("Arial", 11, "bold"),
-                               text_color=self._accent, anchor=anchor)
-            lbl.pack(side="left", padx=(2, 4))
+            ctk.CTkLabel(hdr_inner, text=h, width=w,
+                         font=ctk.CTkFont("Arial", 11, "bold"),
+                         text_color=self._accent, anchor=anchor).pack(side="left", padx=(2, 4))
 
-        # Scrollable body
-        self._scroll = ctk.CTkScrollableFrame(self, fg_color=BG_MAIN, corner_radius=0)
-        self._scroll.pack(fill="both", expand=True, padx=0, pady=0)
+        # Fixed-height body frame (12 rows × 34 px = 408 px)
+        body_h = self.PAGE_SIZE * 34
+        self._body = ctk.CTkFrame(self, fg_color=BG_MAIN, corner_radius=0, height=body_h)
+        self._body.pack(fill="x", padx=0, pady=0)
+        self._body.pack_propagate(False)
 
-        # Totals bar
-        self._totals_bar = ctk.CTkFrame(self, fg_color=BG_CARD, corner_radius=0, height=38)
-        self._totals_bar.pack(fill="x", padx=0, pady=(1, 0))
-        self._totals_bar.pack_propagate(False)
-        self._total_lbl = ctk.CTkLabel(self._totals_bar, text="Total: Rs 0.00",
-                                        font=ctk.CTkFont("Arial", 13, "bold"),
-                                        text_color=self._accent)
-        self._total_lbl.pack(side="right", padx=18)
-        self._count_lbl = ctk.CTkLabel(self._totals_bar, text="0 records",
+        # Pagination bar
+        pg_bar = ctk.CTkFrame(self, fg_color=BG_CARD, corner_radius=0, height=38)
+        pg_bar.pack(fill="x", pady=(1, 0))
+        pg_bar.pack_propagate(False)
+        pg_inner = ctk.CTkFrame(pg_bar, fg_color="transparent")
+        pg_inner.pack(fill="both", expand=True, padx=10)
+
+        self._btn_prev = ctk.CTkButton(pg_inner, text="◀  Prev", width=90, height=26,
+                                        fg_color=BG_PANEL, hover_color=BORDER,
+                                        text_color=TEXT_MUTED, border_color=BORDER, border_width=1,
+                                        font=ctk.CTkFont("Arial", 11),
+                                        command=self._prev_page)
+        self._btn_prev.pack(side="left", padx=(0, 6))
+
+        self._page_lbl = ctk.CTkLabel(pg_inner, text="Page 1 / 1",
+                                       font=ctk.CTkFont("Arial", 11),
+                                       text_color=TEXT_MUTED, width=120)
+        self._page_lbl.pack(side="left")
+
+        self._btn_next = ctk.CTkButton(pg_inner, text="Next  ▶", width=90, height=26,
+                                        fg_color=BG_PANEL, hover_color=BORDER,
+                                        text_color=TEXT_MUTED, border_color=BORDER, border_width=1,
+                                        font=ctk.CTkFont("Arial", 11),
+                                        command=self._next_page)
+        self._btn_next.pack(side="left", padx=6)
+
+        self._count_lbl = ctk.CTkLabel(pg_inner, text="0 records",
                                         font=ctk.CTkFont("Arial", 11),
                                         text_color=TEXT_MUTED)
-        self._count_lbl.pack(side="left", padx=18)
+        self._count_lbl.pack(side="left", padx=14)
 
-    # ── public ──────────────────────────────────────────────────────────────
-    def load(self, rows: list[dict]):
-        self._rows = rows
-        for w in self._scroll.winfo_children():
+        self._total_lbl = ctk.CTkLabel(pg_inner, text="Total: Rs 0",
+                                        font=ctk.CTkFont("Arial", 13, "bold"),
+                                        text_color=self._accent)
+        self._total_lbl.pack(side="right", padx=10)
+
+        self._page_total_lbl = ctk.CTkLabel(pg_inner, text="",
+                                             font=ctk.CTkFont("Arial", 11),
+                                             text_color=TEXT_MUTED)
+        self._page_total_lbl.pack(side="right", padx=(0, 12))
+
+    # ── pagination helpers ───────────────────────────────────────────────────
+    def _total_pages(self):
+        if not self._all_rows:
+            return 1
+        import math
+        return math.ceil(len(self._all_rows) / self.PAGE_SIZE)
+
+    def _prev_page(self):
+        if self._cur_page > 1:
+            self._cur_page -= 1
+            self._render_page()
+
+    def _next_page(self):
+        if self._cur_page < self._total_pages():
+            self._cur_page += 1
+            self._render_page()
+
+    def _render_page(self):
+        # Clear body
+        for w in self._body.winfo_children():
             w.destroy()
 
-        total = 0.0
-        for idx, r in enumerate(rows):
-            total += r["amount"]
-            bg = BG_ROW_ALT if idx % 2 == 0 else BG_PANEL
-            row_frame = ctk.CTkFrame(self._scroll, fg_color=bg, height=34, corner_radius=0)
-            row_frame.pack(fill="x", pady=0)
+        tp    = self._total_pages()
+        start = (self._cur_page - 1) * self.PAGE_SIZE
+        page_rows = self._all_rows[start: start + self.PAGE_SIZE]
+
+        page_total = 0.0
+        for slot in range(self.PAGE_SIZE):
+            bg = BG_ROW_ALT if slot % 2 == 0 else BG_PANEL
+            row_frame = ctk.CTkFrame(self._body, fg_color=bg, height=34, corner_radius=0)
+            row_frame.pack(fill="x")
             row_frame.pack_propagate(False)
             inner = ctk.CTkFrame(row_frame, fg_color="transparent")
             inner.pack(fill="both", expand=True, padx=6)
 
-            cells = [
-                str(idx + 1),
-                r.get("date", "")[:10],
-                r.get("source", ""),
-                r.get("ref", ""),
-                r.get("party", ""),
-                r.get("description", ""),
-                f"Rs {r['amount']:,.0f}",
-            ]
-            for i, (val, w) in enumerate(zip(cells, self.COL_WIDTHS)):
-                anchor = "e" if i == 6 else "w"
-                color  = self._accent if i == 6 else TEXT_PRIMARY
-                lbl = ctk.CTkLabel(inner, text=val, width=w, anchor=anchor,
-                                   font=ctk.CTkFont("Arial", 11),
-                                   text_color=color)
-                lbl.pack(side="left", padx=(2, 4))
+            if slot < len(page_rows):
+                r   = page_rows[slot]
+                idx = start + slot    # global 0-based index
+                page_total += r["amount"]
+                cells = [
+                    str(idx + 1),
+                    r.get("date", "")[:10],
+                    r.get("source", ""),
+                    r.get("ref", ""),
+                    r.get("party", ""),
+                    r.get("description", ""),
+                    f"Rs {r['amount']:,.0f}",
+                ]
+                for i, (val, w) in enumerate(zip(cells, self.COL_WIDTHS)):
+                    anchor = "e" if i == 6 else "w"
+                    color  = self._accent if i == 6 else TEXT_PRIMARY
+                    ctk.CTkLabel(inner, text=val, width=w, anchor=anchor,
+                                 font=ctk.CTkFont("Arial", 11),
+                                 text_color=color).pack(side="left", padx=(2, 4))
+            # empty slot → blank row (already bg-coloured, nothing to add)
 
-        # Update totals bar
-        self._total_lbl.configure(text=f"Total: Rs {total:,.0f}")
-        self._count_lbl.configure(text=f"{len(rows)} records")
+        # Update pagination controls
+        self._page_lbl.configure(text=f"Page {self._cur_page} / {tp}")
+        self._btn_prev.configure(state="normal" if self._cur_page > 1 else "disabled",
+                                  text_color=TEXT_PRIMARY if self._cur_page > 1 else TEXT_MUTED)
+        self._btn_next.configure(state="normal" if self._cur_page < tp else "disabled",
+                                  text_color=TEXT_PRIMARY if self._cur_page < tp else TEXT_MUTED)
+
+        grand_total = sum(r["amount"] for r in self._all_rows)
+        self._total_lbl.configure(text=f"Grand Total: Rs {grand_total:,.0f}")
+        self._count_lbl.configure(text=f"{len(self._all_rows)} records")
+        if tp > 1:
+            self._page_total_lbl.configure(
+                text=f"Page Total: Rs {page_total:,.0f}")
+        else:
+            self._page_total_lbl.configure(text="")
+
+    # ── public ──────────────────────────────────────────────────────────────
+    def load(self, rows: list[dict]):
+        self._all_rows = rows
+        self._cur_page = 1
+        self._render_page()
 
     def get_rows(self):
-        return self._rows
+        return self._all_rows
 
     def get_total(self):
-        return sum(r["amount"] for r in self._rows)
+        return sum(r["amount"] for r in self._all_rows)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
