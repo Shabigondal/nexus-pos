@@ -1083,35 +1083,21 @@ def init_dealer_tables():
     conn.close()
 
 
-def get_all_dealers(search_query="", date_from=None, date_to=None):
-    """Saare dealers fetch karo — search aur date filter support ke saath."""
+def get_all_dealers(search_query=""):
+    """Saare dealers fetch karo — search support ke saath."""
     conn = get_connection()
     cursor = conn.cursor()
-
-    conditions = []
-    params = []
-
     if search_query:
         like = f"%{search_query}%"
-        conditions.append("(dealer_name LIKE ? OR item_name LIKE ? OR dealer_contact LIKE ?)")
-        params.extend([like, like, like])
-
-    if date_from:
-        conditions.append("DATE(date_added) >= ?")
-        params.append(date_from)
-
-    if date_to:
-        conditions.append("DATE(date_added) <= ?")
-        params.append(date_to)
-
-    where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-
-    cursor.execute(f"""SELECT dealer_id, dealer_name, dealer_contact, item_name, unit,
-                              quantity, total_cost, per_item_cost, date_added, last_updated
-                       FROM dealers
-                       {where_clause}
-                       ORDER BY last_updated DESC""", params)
-
+        cursor.execute("""SELECT dealer_id, dealer_name, dealer_contact, item_name, unit,
+                                 quantity, total_cost, per_item_cost, date_added, last_updated
+                          FROM dealers
+                          WHERE dealer_name LIKE ? OR item_name LIKE ? OR dealer_contact LIKE ?
+                          ORDER BY last_updated DESC""", (like, like, like))
+    else:
+        cursor.execute("""SELECT dealer_id, dealer_name, dealer_contact, item_name, unit,
+                                 quantity, total_cost, per_item_cost, date_added, last_updated
+                          FROM dealers ORDER BY last_updated DESC""")
     rows = cursor.fetchall()
     conn.close()
     return rows
@@ -1195,3 +1181,92 @@ def get_dealer_history(dealer_id):
 init_db()
 init_dealer_tables()
 _auto_repair_historical_fractional_quantities()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HOUSEHOLD EXPENSES
+# ══════════════════════════════════════════════════════════════════════════════
+def init_household_expense_tables():
+    """Household expense table create karo agar exist nahi karti."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS household_expenses (
+            expense_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            category     TEXT    NOT NULL,
+            description  TEXT,
+            amount       REAL    NOT NULL DEFAULT 0.0,
+            expense_date TEXT    NOT NULL,
+            created_at   TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def get_all_household_expenses(search_query="", date_from=None, date_to=None):
+    """Saare expenses fetch karo — search + date filter ke saath."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    conditions = []
+    params = []
+
+    if search_query:
+        like = f"%{search_query}%"
+        conditions.append("(category LIKE ? OR description LIKE ?)")
+        params.extend([like, like])
+
+    if date_from:
+        conditions.append("DATE(expense_date) >= ?")
+        params.append(date_from)
+
+    if date_to:
+        conditions.append("DATE(expense_date) <= ?")
+        params.append(date_to)
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    cursor.execute(f"""
+        SELECT expense_id, category, description, amount, expense_date, created_at
+        FROM household_expenses
+        {where}
+        ORDER BY expense_date DESC, expense_id DESC
+    """, params)
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def add_household_expense(category, description, amount, expense_date):
+    """Naya expense record add karo."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO household_expenses (category, description, amount, expense_date)
+        VALUES (?, ?, ?, ?)
+    """, (category, description or "", amount, expense_date))
+    conn.commit()
+    conn.close()
+
+
+def update_household_expense(expense_id, category, description, amount, expense_date):
+    """Existing expense update karo."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE household_expenses
+        SET category=?, description=?, amount=?, expense_date=?
+        WHERE expense_id=?
+    """, (category, description or "", amount, expense_date, expense_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_household_expense(expense_id):
+    """Expense delete karo."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM household_expenses WHERE expense_id=?", (expense_id,))
+    conn.commit()
+    conn.close()
