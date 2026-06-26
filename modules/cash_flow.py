@@ -460,15 +460,10 @@ class CashFlowView(ctk.CTkFrame):
                                         text_color=ACCENT_RED)
         self._badge_out.pack(side="right", padx=(0, 16))
 
-        # ── Tables ───────────────────────────────────────────────────────────
-        self._tbl_in  = _CashTable(self, accent_color=ACCENT_GREEN)
-        self._tbl_out = _CashTable(self, accent_color=ACCENT_RED)
-        # Only one shown at a time
-        self._tbl_in.pack(fill="both", expand=True)
-
         # ── Net Flow bar ─────────────────────────────────────────────────────
+        # Pack BEFORE tables so it stays visible at bottom (pack order matters)
         net_bar = ctk.CTkFrame(self, fg_color=BG_CARD, corner_radius=10, height=44)
-        net_bar.pack(fill="x", pady=(8, 0))
+        net_bar.pack(fill="x", pady=(8, 0), side="bottom")
         net_bar.pack_propagate(False)
         nb_inner = ctk.CTkFrame(net_bar, fg_color="transparent")
         nb_inner.pack(fill="both", expand=True, padx=20)
@@ -482,6 +477,13 @@ class CashFlowView(ctk.CTkFrame):
         self._net_in_lbl.pack(side="right", padx=(0, 30))
         self._net_out_lbl = ctk.CTkLabel(nb_inner, text="", font=ctk.CTkFont("Arial", 11), text_color=ACCENT_RED)
         self._net_out_lbl.pack(side="right", padx=(0, 16))
+
+        # ── Tables ───────────────────────────────────────────────────────────
+        # Pack AFTER net_bar (which is side="bottom") so they fill remaining space
+        self._tbl_in  = _CashTable(self, accent_color=ACCENT_GREEN)
+        self._tbl_out = _CashTable(self, accent_color=ACCENT_RED)
+        # Only one shown at a time — fill="x" keeps fixed height, no expand
+        self._tbl_in.pack(fill="x", pady=(0, 0))
 
     # ── helpers ─────────────────────────────────────────────────────────────
     def _quick_range(self, delta):
@@ -502,14 +504,14 @@ class CashFlowView(ctk.CTkFrame):
         self._active_tab = tab
         if tab == "in":
             self._tbl_out.pack_forget()
-            self._tbl_in.pack(fill="both", expand=True)
+            self._tbl_in.pack(fill="x")
             self._btn_in.configure(fg_color=ACCENT_GREEN, text_color="#0a1f14",
                                    font=ctk.CTkFont("Arial", 13, "bold"))
             self._btn_out.configure(fg_color=BG_CARD, text_color=TEXT_MUTED,
                                     font=ctk.CTkFont("Arial", 13))
         else:
             self._tbl_in.pack_forget()
-            self._tbl_out.pack(fill="both", expand=True)
+            self._tbl_out.pack(fill="x")
             self._btn_out.configure(fg_color=ACCENT_RED, text_color="#1f0a0a",
                                     font=ctk.CTkFont("Arial", 13, "bold"))
             self._btn_in.configure(fg_color=BG_CARD, text_color=TEXT_MUTED,
