@@ -239,15 +239,9 @@ class _CashTable(ctk.CTkFrame):
                          font=ctk.CTkFont("Arial", 11, "bold"),
                          text_color=self._accent, anchor=anchor).pack(side="left", padx=(2, 4))
 
-        # Fixed-height body frame (12 rows × 34 px = 408 px)
-        body_h = self.PAGE_SIZE * 34
-        self._body = ctk.CTkFrame(self, fg_color=BG_MAIN, corner_radius=0, height=body_h)
-        self._body.pack(fill="x", padx=0, pady=0)
-        self._body.pack_propagate(False)
-
-        # Pagination bar
+        # ── Pagination bar packed FIRST at bottom (Tkinter rule: side="bottom" must be packed before body)
         pg_bar = ctk.CTkFrame(self, fg_color=BG_CARD, corner_radius=0, height=38)
-        pg_bar.pack(fill="x", pady=(1, 0))
+        pg_bar.pack(fill="x", pady=(1, 0), side="bottom")
         pg_bar.pack_propagate(False)
         pg_inner = ctk.CTkFrame(pg_bar, fg_color="transparent")
         pg_inner.pack(fill="both", expand=True, padx=10)
@@ -285,6 +279,12 @@ class _CashTable(ctk.CTkFrame):
                                              font=ctk.CTkFont("Arial", 11),
                                              text_color=TEXT_MUTED)
         self._page_total_lbl.pack(side="right", padx=(0, 12))
+
+        # ── Body frame packed AFTER pg_bar (fills remaining space between header and pagination)
+        body_h = self.PAGE_SIZE * 34
+        self._body = ctk.CTkFrame(self, fg_color=BG_MAIN, corner_radius=0, height=body_h)
+        self._body.pack(fill="x", padx=0, pady=0)
+        self._body.pack_propagate(False)
 
     # ── pagination helpers ───────────────────────────────────────────────────
     def _total_pages(self):
