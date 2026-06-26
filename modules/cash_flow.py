@@ -482,8 +482,8 @@ class CashFlowView(ctk.CTkFrame):
         # Pack AFTER net_bar (which is side="bottom") so they fill remaining space
         self._tbl_in  = _CashTable(self, accent_color=ACCENT_GREEN)
         self._tbl_out = _CashTable(self, accent_color=ACCENT_RED)
-        # Only one shown at a time — fill="x" keeps fixed height, no expand
-        self._tbl_in.pack(fill="x", pady=(0, 0))
+        # Only one shown at a time — fill both so pagination bar is always visible
+        self._tbl_in.pack(fill="both", expand=True, pady=(0, 0))
 
     # ── helpers ─────────────────────────────────────────────────────────────
     def _quick_range(self, delta):
@@ -504,14 +504,14 @@ class CashFlowView(ctk.CTkFrame):
         self._active_tab = tab
         if tab == "in":
             self._tbl_out.pack_forget()
-            self._tbl_in.pack(fill="x")
+            self._tbl_in.pack(fill="both", expand=True)
             self._btn_in.configure(fg_color=ACCENT_GREEN, text_color="#0a1f14",
                                    font=ctk.CTkFont("Arial", 13, "bold"))
             self._btn_out.configure(fg_color=BG_CARD, text_color=TEXT_MUTED,
                                     font=ctk.CTkFont("Arial", 13))
         else:
             self._tbl_in.pack_forget()
-            self._tbl_out.pack(fill="x")
+            self._tbl_out.pack(fill="both", expand=True)
             self._btn_out.configure(fg_color=ACCENT_RED, text_color="#1f0a0a",
                                     font=ctk.CTkFont("Arial", 13, "bold"))
             self._btn_in.configure(fg_color=BG_CARD, text_color=TEXT_MUTED,
