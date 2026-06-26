@@ -1083,21 +1083,35 @@ def init_dealer_tables():
     conn.close()
 
 
-def get_all_dealers(search_query=""):
-    """Saare dealers fetch karo — search support ke saath."""
+def get_all_dealers(search_query="", date_from=None, date_to=None):
+    """Saare dealers fetch karo — search aur date filter support ke saath."""
     conn = get_connection()
     cursor = conn.cursor()
+
+    conditions = []
+    params = []
+
     if search_query:
         like = f"%{search_query}%"
-        cursor.execute("""SELECT dealer_id, dealer_name, dealer_contact, item_name, unit,
-                                 quantity, total_cost, per_item_cost, date_added, last_updated
-                          FROM dealers
-                          WHERE dealer_name LIKE ? OR item_name LIKE ? OR dealer_contact LIKE ?
-                          ORDER BY last_updated DESC""", (like, like, like))
-    else:
-        cursor.execute("""SELECT dealer_id, dealer_name, dealer_contact, item_name, unit,
-                                 quantity, total_cost, per_item_cost, date_added, last_updated
-                          FROM dealers ORDER BY last_updated DESC""")
+        conditions.append("(dealer_name LIKE ? OR item_name LIKE ? OR dealer_contact LIKE ?)")
+        params.extend([like, like, like])
+
+    if date_from:
+        conditions.append("DATE(date_added) >= ?")
+        params.append(date_from)
+
+    if date_to:
+        conditions.append("DATE(date_added) <= ?")
+        params.append(date_to)
+
+    where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    cursor.execute(f"""SELECT dealer_id, dealer_name, dealer_contact, item_name, unit,
+                              quantity, total_cost, per_item_cost, date_added, last_updated
+                       FROM dealers
+                       {where_clause}
+                       ORDER BY last_updated DESC""", params)
+
     rows = cursor.fetchall()
     conn.close()
     return rows

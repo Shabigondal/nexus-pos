@@ -4,6 +4,11 @@ import database.db_manager as db
 import tkinter.messagebox as messagebox
 import tkinter.filedialog as filedialog
 from datetime import datetime
+try:
+    from tkcalendar import DateEntry
+    CALENDAR_OK = True
+except ImportError:
+    CALENDAR_OK = False
 
 # ─── PDF Export ───────────────────────────────────────────────────────────────
 try:
@@ -190,7 +195,7 @@ class DealerView(ctk.CTkFrame):
 
         # ── TOP BAR ───────────────────────────────────────────────────────────
         top_bar = ctk.CTkFrame(self, fg_color="transparent")
-        top_bar.pack(fill="x", padx=20, pady=(10, 12))
+        top_bar.pack(fill="x", padx=20, pady=(10, 6))
 
         self.search_entry = ctk.CTkEntry(
             top_bar,
@@ -214,6 +219,89 @@ class DealerView(ctk.CTkFrame):
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             corner_radius=6, command=self.open_add_modal
         ).pack(side="right")
+
+        # ── DATE FILTER BAR ───────────────────────────────────────────────────
+        date_bar = ctk.CTkFrame(self, fg_color="transparent")
+        date_bar.pack(fill="x", padx=20, pady=(0, 8))
+
+        ctk.CTkLabel(
+            date_bar, text="From:",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color="#a0a0b0"
+        ).pack(side="left", padx=(0, 6))
+
+        if CALENDAR_OK:
+            self.date_from = DateEntry(
+                date_bar, width=12, background="#1f293d", foreground="white",
+                borderwidth=0, date_pattern="yyyy-mm-dd",
+                font=("Segoe UI", 11), headersbackground="#1a3a5c",
+                headersforeground="white", selectbackground="#4a90e2"
+            )
+            self.date_from.pack(side="left", padx=(0, 14), ipady=4)
+
+            ctk.CTkLabel(
+                date_bar, text="To:",
+                font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+                text_color="#a0a0b0"
+            ).pack(side="left", padx=(0, 6))
+
+            self.date_to = DateEntry(
+                date_bar, width=12, background="#1f293d", foreground="white",
+                borderwidth=0, date_pattern="yyyy-mm-dd",
+                font=("Segoe UI", 11), headersbackground="#1a3a5c",
+                headersforeground="white", selectbackground="#4a90e2"
+            )
+            self.date_to.pack(side="left", padx=(0, 10), ipady=4)
+
+            ctk.CTkButton(
+                date_bar, text="🔎  Filter", height=32, width=100,
+                fg_color="#1f293d", hover_color="#2d3d5a",
+                font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+                corner_radius=6, command=self._apply_date_filter
+            ).pack(side="left", padx=(0, 6))
+
+            ctk.CTkButton(
+                date_bar, text="✖  Clear", height=32, width=90,
+                fg_color="#2a2a32", hover_color="#3a3a42",
+                font=ctk.CTkFont(family="Segoe UI", size=12),
+                corner_radius=6, command=self._clear_date_filter
+            ).pack(side="left")
+        else:
+            # Fallback: plain text entries if tkcalendar not installed
+            self._date_from_var = ctk.StringVar()
+            self._date_to_var   = ctk.StringVar()
+
+            ctk.CTkEntry(
+                date_bar, textvariable=self._date_from_var,
+                placeholder_text="YYYY-MM-DD", width=120, height=32,
+                fg_color="#16161a", border_color="#222227", corner_radius=6
+            ).pack(side="left", padx=(0, 14))
+
+            ctk.CTkLabel(
+                date_bar, text="To:",
+                font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+                text_color="#a0a0b0"
+            ).pack(side="left", padx=(0, 6))
+
+            ctk.CTkEntry(
+                date_bar, textvariable=self._date_to_var,
+                placeholder_text="YYYY-MM-DD", width=120, height=32,
+                fg_color="#16161a", border_color="#222227", corner_radius=6
+            ).pack(side="left", padx=(0, 10))
+
+            ctk.CTkButton(
+                date_bar, text="🔎  Filter", height=32, width=100,
+                fg_color="#1f293d", hover_color="#2d3d5a",
+                font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+                corner_radius=6, command=self._apply_date_filter
+            ).pack(side="left", padx=(0, 6))
+
+            ctk.CTkButton(
+                date_bar, text="✖  Clear", height=32, width=90,
+                fg_color="#2a2a32", hover_color="#3a3a42",
+                font=ctk.CTkFont(family="Segoe UI", size=12),
+                corner_radius=6, command=self._clear_date_filter
+            ).pack(side="left")
 
         # ── GRID CONTAINER ────────────────────────────────────────────────────
         self.grid_container = ctk.CTkScrollableFrame(
@@ -262,10 +350,52 @@ class DealerView(ctk.CTkFrame):
             shop = "Nexus POS"
         export_dealers_pdf(self.cached_dealers, shop_name=shop)
 
+    # ── DATE FILTER HELPERS ───────────────────────────────────────────────────
+    def _get_date_range(self):
+        """Return (date_from, date_to) as YYYY-MM-DD strings, or None."""
+        if CALENDAR_OK:
+            df = self.date_from.get_date().strftime("%Y-%m-%d")
+            dt = self.date_to.get_date().strftime("%Y-%m-%d")
+        else:
+            df = self._date_from_var.get().strip() or None
+            dt = self._date_to_var.get().strip() or None
+        return df, dt
+
+    def _apply_date_filter(self):
+        self.current_page = 0
+        self.refresh_grid(self.search_entry.get().strip())
+
+    def _clear_date_filter(self):
+        if CALENDAR_OK:
+            from datetime import date
+            today = date.today()
+            self.date_from.set_date(today)
+            self.date_to.set_date(today)
+            # Reset internal filter state by clearing the stored range
+            self._date_filter_active = False
+        else:
+            self._date_from_var.set("")
+            self._date_to_var.set("")
+            self._date_filter_active = False
+        self.current_page = 0
+        self.refresh_grid(self.search_entry.get().strip())
+
     # ── DATA ──────────────────────────────────────────────────────────────────
     def refresh_grid(self, search_text=""):
-        self.cached_dealers = db.get_all_dealers(search_text)
+        df, dt = self._get_date_range()
+
+        # Only apply date filter if user explicitly clicked Filter
+        # (clear sets _date_filter_active = False)
+        if getattr(self, "_date_filter_active", False):
+            self.cached_dealers = db.get_all_dealers(search_text, date_from=df, date_to=dt)
+        else:
+            self.cached_dealers = db.get_all_dealers(search_text)
         self._render_rows()
+
+    def _apply_date_filter(self):
+        self._date_filter_active = True
+        self.current_page = 0
+        self.refresh_grid(self.search_entry.get().strip())
 
     def _on_search(self, event=None):
         self.current_page = 0
