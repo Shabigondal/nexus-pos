@@ -217,6 +217,7 @@ class _CashTable(ctk.CTkFrame):
     HEADERS    = ["#", "Date", "Source", "Ref", "Party / Category", "Description", "Amount (Rs)"]
     COL_WIDTHS = [30, 90, 140, 80, 170, 220, 110]
     PAGE_SIZE  = 12
+    ROW_H      = 44   # actual rendered height per row in CTk
 
     def __init__(self, parent, accent_color, **kwargs):
         super().__init__(parent, fg_color=BG_PANEL, corner_radius=10, **kwargs)
@@ -281,7 +282,7 @@ class _CashTable(ctk.CTkFrame):
         self._page_total_lbl.pack(side="right", padx=(0, 12))
 
         # ── Body frame packed AFTER pg_bar (fills remaining space between header and pagination)
-        body_h = self.PAGE_SIZE * 34
+        body_h = self.PAGE_SIZE * self.ROW_H
         self._body = ctk.CTkFrame(self, fg_color=BG_MAIN, corner_radius=0, height=body_h)
         self._body.pack(fill="x", padx=0, pady=0)
         self._body.pack_propagate(False)
@@ -315,7 +316,7 @@ class _CashTable(ctk.CTkFrame):
         page_total = 0.0
         for slot in range(self.PAGE_SIZE):
             bg = BG_ROW_ALT if slot % 2 == 0 else BG_PANEL
-            row_frame = ctk.CTkFrame(self._body, fg_color=bg, height=34, corner_radius=0)
+            row_frame = ctk.CTkFrame(self._body, fg_color=bg, height=self.ROW_H, corner_radius=0)
             row_frame.pack(fill="x")
             row_frame.pack_propagate(False)
             inner = ctk.CTkFrame(row_frame, fg_color="transparent")

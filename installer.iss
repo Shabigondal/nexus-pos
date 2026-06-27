@@ -8,7 +8,7 @@
 ; ============================================================
 
 #define MyAppName "Nexus POS"
-#define MyAppVersion "1.3.7"
+#define MyAppVersion "1.3.8"
 #define MyAppPublisher "Nexus Industrial"
 #define MyAppExeName "NexusPOS.exe"
 #define MyAppURL "https://github.com/Shabigondal/nexus-pos"
