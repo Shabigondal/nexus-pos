@@ -461,7 +461,7 @@ class CashFlowView(ctk.CTkFrame):
         # ── Net Flow bar ─────────────────────────────────────────────────────
         # Pack BEFORE tables so it stays visible at bottom (pack order matters)
         net_bar = ctk.CTkFrame(self, fg_color=BG_CARD, corner_radius=10, height=44)
-        net_bar.pack(fill="x", pady=(8, 0), side="bottom")
+        net_bar.pack(fill="x", pady=(0, 0), side="bottom")
         net_bar.pack_propagate(False)
         nb_inner = ctk.CTkFrame(net_bar, fg_color="transparent")
         nb_inner.pack(fill="both", expand=True, padx=20)

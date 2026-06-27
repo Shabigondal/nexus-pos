@@ -205,9 +205,9 @@ class EnterpriseBillingApp(ctk.CTk):
         self.reset_workspace()
         header = ctk.CTkLabel(self.workspace, text="Cash Flow Monitor",
                               font=ctk.CTkFont(family="Arial", size=20, weight="bold"), text_color="#ffffff")
-        header.pack(anchor="w", padx=30, pady=(25, 10))
+        header.pack(anchor="w", padx=30, pady=(25, 4))
         cash_flow_panel = CashFlowView(self.workspace)
-        cash_flow_panel.pack(fill="both", expand=True, padx=30, pady=(0, 30))
+        cash_flow_panel.pack(fill="both", expand=True, padx=30, pady=(0, 8))
 
     def route_settings(self):
         self.reset_workspace()
