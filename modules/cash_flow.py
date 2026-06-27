@@ -281,11 +281,9 @@ class _CashTable(ctk.CTkFrame):
                                              text_color=TEXT_MUTED)
         self._page_total_lbl.pack(side="right", padx=(0, 12))
 
-        # ── Body frame packed AFTER pg_bar (fills remaining space between header and pagination)
-        body_h = self.PAGE_SIZE * self.ROW_H
-        self._body = ctk.CTkFrame(self, fg_color=BG_MAIN, corner_radius=0, height=body_h)
-        self._body.pack(fill="x", padx=0, pady=0)
-        self._body.pack_propagate(False)
+        # ── Body frame — fills ALL remaining space between header and pagination bar
+        self._body = ctk.CTkFrame(self, fg_color=BG_MAIN, corner_radius=0)
+        self._body.pack(fill="both", expand=True, padx=0, pady=0)
 
     # ── pagination helpers ───────────────────────────────────────────────────
     def _total_pages(self):
@@ -316,9 +314,8 @@ class _CashTable(ctk.CTkFrame):
         page_total = 0.0
         for slot in range(self.PAGE_SIZE):
             bg = BG_ROW_ALT if slot % 2 == 0 else BG_PANEL
-            row_frame = ctk.CTkFrame(self._body, fg_color=bg, height=self.ROW_H, corner_radius=0)
-            row_frame.pack(fill="x")
-            row_frame.pack_propagate(False)
+            row_frame = ctk.CTkFrame(self._body, fg_color=bg, corner_radius=0)
+            row_frame.pack(fill="both", expand=True)
             inner = ctk.CTkFrame(row_frame, fg_color="transparent")
             inner.pack(fill="both", expand=True, padx=6)
 
